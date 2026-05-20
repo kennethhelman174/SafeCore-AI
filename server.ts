@@ -190,6 +190,7 @@ async function startServer() {
   }));
 
   app.use(express.json({ limit: '10mb' })); // Limit body size
+  app.use(express.urlencoded({ extended: true }));
   app.use(cookieParser());
 
   // API Routes - Public health check
@@ -224,12 +225,24 @@ async function startServer() {
 
   // AUTHENTICATION APIs
   app.post("/api/auth/login", authLimiter, async (req, res) => {
+    // Safe debug logging as requested
+    console.log("[LOGIN DEBUG] Request body type:", typeof req.body);
+    console.log("[LOGIN DEBUG] Request body keys:", Object.keys(req.body || {}));
+    console.log("[LOGIN DEBUG] Request body has email:", !!(req.body && req.body.email));
+
     try {
       const loginSchema = z.object({
         email: z.string().trim().email("Please enter a valid email address"),
         password: z.string().min(1, "Password is required")
       });
-      const { email, password } = loginSchema.parse(req.body);
+
+      const parsed = loginSchema.safeParse(req.body);
+      if (!parsed.success) {
+        console.warn("[LOGIN DEBUG] Input validation failed:", parsed.error.format());
+        return res.status(400).json({ error: "Email and password are required.", details: parsed.error.issues });
+      }
+
+      const { email, password } = parsed.data;
 
       const user = await prisma.user.findUnique({ 
         where: { email },

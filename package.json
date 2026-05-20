@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "tsx scripts/guard-db.ts && vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "node scripts/guard-db.mjs && vite build && esbuild server.ts --bundle --platform=node --outfile=dist/server.cjs --format=cjs",
     "start": "node dist/server.cjs",
     "prisma:generate": "prisma generate",
     "db:push": "prisma db push",
