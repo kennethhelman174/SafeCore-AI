@@ -1,0 +1,8 @@
+node_modules
+.env
+.env.*
+*.db
+prisma/*.db
+dist
+coverage
+logs
