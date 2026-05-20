@@ -13,6 +13,7 @@ SafeCore is a production-ready, full-stack safety management system designed for
 - **Frontend**: React 19, Vite, Tailwind CSS, Lucide, Motion/React, Recharts.
 - **Backend**: Node.js, Express, JWT, Helmet, Zod, Bcrypt.
 - **Database**: PostgreSQL (Production-ready) with Prisma ORM.
+  - *Note: SafeCore uses PostgreSQL only for Docker/local production. SQLite is not supported in this deployment.*
 - **Inference**: Ollama (Local AI).
 
 ## 📦 Installation & Setup

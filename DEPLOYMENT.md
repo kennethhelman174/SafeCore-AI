@@ -4,6 +4,7 @@
 SafeCore follows a modern distributed industrial architecture:
 - **Application Node**: React/Vite frontend + Node.js/Express backend.
 - **Storage Node**: PostgreSQL (Production-grade).
+  - *Constraint: SafeCore uses PostgreSQL only for Docker/local production. SQLite is not supported in this deployment.*
 - **Inference Node**: Ollama (Local AI API).
 
 ## Self-Hosting with Docker

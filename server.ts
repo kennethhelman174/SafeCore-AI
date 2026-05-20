@@ -16,13 +16,8 @@ import { PrismaClient } from "@prisma/client";
 
 import cookieParser from "cookie-parser";
 
-const prisma = new PrismaClient({
-  datasources: {
-    db: {
-      url: `file:${path.join(process.cwd(), "prisma", "dev.db")}`
-    }
-  }
-});
+const prisma = new PrismaClient();
+
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET && process.env.NODE_ENV === "production") {
@@ -41,6 +36,9 @@ if (!SECRET) {
 }
 
 const FINAL_SECRET = SECRET || "warehouse-safety-platform-dev-secret-don-not-use-in-prod";
+
+const APP_ORIGIN = process.env.APP_ORIGIN || "http://localhost:3000";
+const isHttpsDeployment = APP_ORIGIN.startsWith("https://");
 
 // Security - Rate Limiting
 const apiLimiter = rateLimit({
@@ -135,7 +133,8 @@ async function startServer() {
     await prisma.$queryRaw`SELECT 1`;
     console.log(`[STARTUP] Prisma client ran SELECT 1 successfully.`);
   } catch (error) {
-    console.error(`[STARTUP] Database connection or verification failed:`, error);
+    console.error(`[STARTUP] FATAL DATABASE CONNECTION ERROR. SafeCore cannot start:`, error);
+    process.exit(1);
   }
 
   const app = express();
@@ -145,9 +144,6 @@ async function startServer() {
   app.set('trust proxy', 1);
 
   // Global Security Headers
-  const appOrigin = process.env.APP_ORIGIN || "http://localhost:3000";
-  const isHttpsDeployment = appOrigin.startsWith("https://");
-
   const cspDirectives: any = {
     defaultSrc: ["'self'"],
     baseUri: ["'self'"],
@@ -174,7 +170,10 @@ async function startServer() {
         }
       : false,
     contentSecurityPolicy: process.env.NODE_ENV === "production"
-      ? { directives: cspDirectives }
+      ? {
+          useDefaults: false,
+          directives: cspDirectives,
+        }
       : false,
   }));
 
@@ -251,7 +250,7 @@ async function startServer() {
       // Set httpOnly cookie for better security
       res.cookie("auth_token", token, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
+        secure: isHttpsDeployment,
         sameSite: 'strict',
         maxAge: 8 * 60 * 60 * 1000 // 8 hours
       });
