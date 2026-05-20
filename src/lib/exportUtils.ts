@@ -12,21 +12,23 @@ import Papa from "papaparse";
 export async function exportToPDF(elementId: string, fileName: string) {
   const input = document.getElementById(elementId);
   if (!input) {
-    console.warn(`Export element with ID "${elementId}" not found.`);
-    return;
+    throw new Error(`Export container element with ID "${elementId}" not found.`);
   }
 
   // Backup styles
   const originalStyle = input.style.cssText;
   
   // Temporarily make it measurable and renderable for html-to-image
-  input.style.position = "fixed";
+  input.style.position = "absolute";
   input.style.left = "0px";
   input.style.top = "0px";
-  input.style.width = "800px";
+  input.style.width = "794px";
   input.style.opacity = "1";
-  input.style.zIndex = "9999";
+  input.style.zIndex = "-1";
   input.style.backgroundColor = "white";
+
+  // Allow layout to settle before capturing
+  await new Promise(resolve => setTimeout(resolve, 300));
 
   try {
     const dataUrl = await toPng(input, {
@@ -56,7 +58,7 @@ export async function exportToPDF(elementId: string, fileName: string) {
 
     pdf.save(`${fileName}.pdf`);
   } catch (error: any) {
-    console.error("html-to-image generation failed:", error);
+    console.error("PDF generation failed:", error);
     throw new Error(error.message || "Failed to generate PDF");
   } finally {
     // Restore styling

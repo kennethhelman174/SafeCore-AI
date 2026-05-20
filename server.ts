@@ -1548,10 +1548,13 @@ async function startServer() {
         }
       });
       if (existingRevision) {
-        return res.status(400).json({ error: `Revision ${newVersion} for document ${oldDoc.docNumber} already exists.` });
+        return res.status(409).json({ error: `A draft revision already exists for this document.` });
       }
 
       const draftStatus = await prisma.documentStatus.findFirst({ where: { name: "Draft" }});
+      if (!draftStatus) {
+        return res.status(500).json({ error: "Draft status is missing. Check seed data." });
+      }
       
       const newDoc = await prisma.$transaction(async (tx) => {
         // Create new doc based on oldDoc
@@ -1562,7 +1565,7 @@ async function startServer() {
             typeId: oldDoc.typeId,
             categoryId: oldDoc.categoryId,
             departmentId: oldDoc.departmentId,
-            statusId: draftStatus!.id,
+            statusId: draftStatus.id,
             currentRevision: newVersion,
             isLatestRevision: true,
             riskLevel: oldDoc.riskLevel,

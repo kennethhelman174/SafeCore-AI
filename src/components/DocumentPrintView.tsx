@@ -5,8 +5,24 @@ interface Props {
   document: any;
 }
 
-export default function DocumentPrintView({ document: doc }: Props) {
-  if (!doc) return null;
+export default function DocumentPrintView({ document: originalDoc }: Props) {
+  if (!originalDoc) return null;
+
+  const doc = {
+    ...originalDoc,
+    ppe: originalDoc.ppe || [],
+    equipment: originalDoc.equipment || [],
+    hazards: originalDoc.hazards || [],
+    controls: originalDoc.controls || [],
+    procedureSteps: originalDoc.procedureSteps || [],
+    checklistItems: originalDoc.checklistItems || [],
+    jsaSteps: originalDoc.jsaSteps || [],
+    criticalControls: originalDoc.criticalControls || [],
+    riskAssessments: originalDoc.riskAssessments || [],
+    revisions: originalDoc.revisions || [],
+    workflows: originalDoc.workflows || [],
+    correctiveActions: originalDoc.correctiveActions || []
+  };
 
   return (
     <div className="relative bg-white p-8 font-serif leading-relaxed text-slate-900 mx-auto max-w-[210mm] print:p-0 overflow-hidden">
@@ -311,7 +327,7 @@ export default function DocumentPrintView({ document: doc }: Props) {
         )}
 
         {/* Approval History */}
-        {doc.workflows?.length > 0 && doc.workflows[0].steps?.length > 0 && (
+        {doc.workflows.length > 0 && doc.workflows[0].steps?.length > 0 && (
           <div>
             <SectionHeading title="Approval History" />
             <table className="w-full text-left text-xs border border-slate-200">
