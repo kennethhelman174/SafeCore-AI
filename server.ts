@@ -221,8 +221,8 @@ async function startServer() {
   app.post("/api/auth/login", authLimiter, async (req, res) => {
     try {
       const loginSchema = z.object({
-        email: z.string().email(),
-        password: z.string().min(6)
+        email: z.string().trim().email("Please enter a valid email address"),
+        password: z.string().min(1, "Password is required")
       });
       const { email, password } = loginSchema.parse(req.body);
 
@@ -263,7 +263,12 @@ async function startServer() {
         }
       });
     } catch (error: any) {
-       if (error instanceof z.ZodError) return res.status(400).json({ error: "Invalid input format" });
+       if (error instanceof z.ZodError) {
+         const errAny = error as any;
+         console.error("Login Input Validation Failed:", errAny.issues || errAny.errors);
+         const firstMsg = errAny.issues?.[0]?.message || errAny.errors?.[0]?.message || "Invalid input format";
+         return res.status(400).json({ error: firstMsg, details: errAny.issues || errAny.errors });
+       }
        console.error("Login Error:", error);
        if (error.name === "PrismaClientInitializationError") {
          return res.status(500).json({ error: "Database connection failed. Check DATABASE_URL, PostgreSQL status, Prisma generate, migrations, and seed." });
