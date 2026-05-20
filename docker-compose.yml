@@ -6,7 +6,7 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/workplace_safety_platform?schema=public
       - NODE_ENV=production
-      - JWT_SECRET=change-this-in-production-12345
+      - JWT_SECRET=change-this-to-a-real-long-random-secret
       - AI_OLLAMA_ENDPOINT=http://ollama-service:11434
       - APP_ORIGIN=http://192.168.6.213:3000
       - SEED_DATABASE=true

@@ -1,5 +1,6 @@
 {
   "name": "SafeCore Enterprise",
   "description": "Industrial-grade Workplace Safety Management Platform for warehouse and distribution center operations, featuring AI-assisted SOP/JSA authoring, automated compliance tracking, and M365 integration.",
-  "requestFramePermissions": ["camera"]
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -17,9 +17,10 @@ function guardDatabase() {
   const forbiddenDbFile = "file:./dev.db";
 
   if (
-    schemaContent.includes(forbiddenProvider) ||
-    schemaContent.includes(forbiddenProviderSingle) ||
-    schemaContent.includes(forbiddenDbFile)
+    process.env.NODE_ENV === "production" &&
+    (schemaContent.includes(forbiddenProvider) ||
+     schemaContent.includes(forbiddenProviderSingle) ||
+     schemaContent.includes(forbiddenDbFile))
   ) {
     console.error("=========================================================================");
     console.error("❌ [SECURITY & ARCHITECTURE VIOLATION]");

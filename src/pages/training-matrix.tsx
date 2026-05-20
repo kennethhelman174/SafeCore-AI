@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../lib/api";
 
 export default function TrainingMatrix() {
   const { token } = useAuth();
@@ -12,8 +13,8 @@ export default function TrainingMatrix() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/training/matrix", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-      fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json())
+      apiRequest("/api/training/matrix"),
+      apiRequest("/api/users")
     ])
     .then(([mResponse, _]) => {
       if (mResponse && !mResponse.error) {
@@ -24,32 +25,24 @@ export default function TrainingMatrix() {
     })
     .catch(err => {
       console.error(err);
+      toast.error("Failed to load training matrix data");
       setLoading(false);
     });
   }, [token]);
 
   const toggleRequirement = async (roleId: string, documentId: string, currentlyRequired: boolean) => {
     try {
-      const res = await fetch("/api/training/matrix/toggle", {
+      await apiRequest("/api/training/matrix/toggle", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ roleId, documentId, required: !currentlyRequired })
+        body: { roleId, documentId, required: !currentlyRequired }
       });
-      if (res.ok) {
-        // Refresh
-        const m = await fetch("/api/training/matrix", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json());
-        if (m && !m.error) {
-          setMatrix(m.matrix || []);
-        }
-      } else {
-        const err = await res.json();
-        toast.error(err.error || "Failed to update requirement");
+      // Refresh
+      const m = await apiRequest("/api/training/matrix");
+      if (m && !m.error) {
+        setMatrix(m.matrix || []);
       }
-    } catch (e) {
-      toast.error("Failed to update requirement");
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update requirement");
     }
   };
 

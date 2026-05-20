@@ -2,6 +2,8 @@ import { AlertCircle, ShieldAlert, ClipboardCheck, ArrowRight, Activity } from "
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../lib/api";
+import { toast } from "sonner";
 
 export function Dashboard() {
   const { token } = useAuth();
@@ -27,43 +29,35 @@ export function Dashboard() {
 
   useEffect(() => {
     // Basic stats from docs
-    fetch('/api/documents', { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch documents');
-        return res.json();
-      })
+    apiRequest('/api/documents')
       .then(data => {
         if (data && Array.isArray(data.data)) {
           setRecentDocs(data.data.slice(0, 5));
         }
       })
       .catch(err => {
-        console.error(err);
+        console.error("Dashboard docs load failed:", err);
+        toast.error(`Could not load recent documents: ${err.message}`);
       });
 
     // Advanced Phase 3 stats
-    fetch('/api/dashboard/stats', { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch stats');
-        return res.json();
+    apiRequest('/api/dashboard/stats')
+      .then(data => {
+        if (data) setStats(s => ({ ...s, ...data }));
       })
-      .then(data => setStats(s => ({ ...s, ...data })))
       .catch(err => {
-        console.error(err);
+        console.error("Dashboard stats load failed:", err);
+        toast.error(`Could not load statistics dashboard: ${err.message}`);
       });
 
     // Fetch Audit Logs
-    fetch('/api/audits/recent', { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => {
-        if (!res.ok) throw new Error('Failed to fetch audits');
-        return res.json();
-      })
+    apiRequest('/api/audits/recent')
       .then(data => {
         if (Array.isArray(data)) setAuditLogs(data);
         setIsLoadingAudits(false);
       })
       .catch(err => {
-        console.error(err);
+        console.error("Dashboard audits load failed:", err);
         setIsLoadingAudits(false);
       });
   }, [token]);

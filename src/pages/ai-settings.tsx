@@ -9,6 +9,8 @@ import { aiService } from "../services/aiService";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 
+import { apiRequest } from "../lib/api";
+
 export default function AISettings() {
   const { token } = useAuth();
   const [ollamaStatus, setOllamaStatus] = useState<"checking" | "online" | "offline">("checking");
@@ -40,10 +42,11 @@ export default function AISettings() {
 
   const fetchUsage = async () => {
     try {
-      const res = await fetch("/api/ai/usage", { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      setUsage(data);
-    } catch (e) {}
+      const data = await apiRequest("/api/ai/usage");
+      setUsage(data || []);
+    } catch (e) {
+      console.error("Failed to load AI usage", e);
+    }
   };
 
   const handleSave = () => {

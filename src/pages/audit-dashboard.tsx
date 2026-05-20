@@ -10,6 +10,8 @@ import {
 import { format } from "date-fns";
 import { exportToPDF, exportToCSV } from "../lib/exportUtils";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../lib/api";
+import { toast } from "sonner";
 
 const COLORS = ["#10B981", "#3B82F6", "#F59E0B", "#EF4444", "#8B5CF6"];
 
@@ -21,15 +23,16 @@ export default function AuditDashboard() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/reports/audit-readiness", { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json()),
-      fetch("/api/reports/training-compliance", { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json()),
-      fetch("/api/exports/history", { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json())
+      apiRequest("/api/reports/audit-readiness"),
+      apiRequest("/api/reports/training-compliance"),
+      apiRequest("/api/exports/history")
     ]).then(([audit, training, history]) => {
       setData({ audit, training });
-      setExportHistory(history);
+      setExportHistory(history || []);
       setLoading(false);
     }).catch(err => {
       console.error(err);
+      toast.error(`Failed to load audit intelligence dashboard data: ${err.message}`);
       setLoading(false);
     });
   }, [token]);

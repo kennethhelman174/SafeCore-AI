@@ -5,6 +5,14 @@ if (process.env.NODE_ENV !== "production") {
   dotenv.config();
 }
 
+// DEVELOPMENT BYPASS PROTECTION AT STARTUP
+// If AUTH_BYPASS=true and NODE_ENV=production, the server must throw a clear startup error and refuse to start
+if (process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV === "production") {
+  const critError = "CRITICAL SECURITY ERROR: AUTH_BYPASS cannot be enabled in a production environment. Server startup aborted for compliance.";
+  console.error("\x1b[41m\x1b[37m%s\x1b[0m", critError);
+  throw new Error(critError);
+}
+
 import { createServer as createViteServer } from "vite";
 import cors from "cors";
 import helmet from "helmet";
@@ -59,7 +67,41 @@ const authLimiter = rateLimit({
 });
 
 // Middleware - Authentication
-const authenticateToken = (req: any, res: any, next: any) => {
+// [TEMPORARY DEV BYPASS LOGIC] Added a controlled authentication bypass for non-production environments
+const authenticateToken = async (req: any, res: any, next: any) => {
+  const isBypassActive = process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV !== "production";
+
+  if (isBypassActive) {
+    try {
+      // Load the seeded administrator user from database
+      const seededAdmin = await prisma.user.findUnique({
+        where: { email: "admin@warehouse.local" },
+        include: { role: true, department: true }
+      });
+
+      if (!seededAdmin) {
+        return res.status(503).json({
+          error: "Auth bypass is enabled, but the seeded admin user was not found. Run the database seed."
+        });
+      }
+
+      // Attach the valid real user data on token structure equivalents to req.user for middlewares (e.g. authorize)
+      req.user = {
+        id: seededAdmin.id,
+        email: seededAdmin.email,
+        name: seededAdmin.name,
+        role: seededAdmin.role.name,
+        dept: seededAdmin.department.name
+      };
+      return next();
+    } catch (err) {
+      console.error("[AUTH BYPASS FAILED] Could not fetch seeded admin user", err);
+      return res.status(503).json({
+        error: "Auth bypass database connection failed. Make sure the database is running."
+      });
+    }
+  }
+
   const authHeader = req.headers['authorization'];
   const bearerToken = authHeader && authHeader.split(' ')[1];
   const cookieToken = req.cookies?.auth_token;
@@ -133,8 +175,8 @@ async function startServer() {
     await prisma.$queryRaw`SELECT 1`;
     console.log(`[STARTUP] Prisma client ran SELECT 1 successfully.`);
   } catch (error) {
-    console.error(`[STARTUP] FATAL DATABASE CONNECTION ERROR. SafeCore cannot start:`, error);
-    process.exit(1);
+    console.error(`[STARTUP] DATABASE CONNECTION ERROR on startup (retrying lazily):`, error);
+    console.warn("⚠️ Continuing startup without terminating, so that development server port 3000 is still bound and reachable.");
   }
 
   const app = express();
@@ -143,13 +185,18 @@ async function startServer() {
   // Trust proxy for reverse proxy environments (Docker, Cloud Run)
   app.set('trust proxy', 1);
 
+  // Parse incoming requests JSON/URL-encoded payloads and cookies first
+  app.use(express.json({ limit: '10mb' })); // Limit body size
+  app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
+
   // Global Security Headers
   const cspDirectives: any = {
     defaultSrc: ["'self'"],
     baseUri: ["'self'"],
     fontSrc: ["'self'", "https:", "data:"],
     formAction: ["'self'"],
-    frameAncestors: ["'self'"],
+    frameAncestors: process.env.NODE_ENV === "production" ? ["'self'"] : ["*"],
     imgSrc: ["'self'", "data:", "https:", "blob:"],
     objectSrc: ["'none'"],
     scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
@@ -163,18 +210,17 @@ async function startServer() {
   }
 
   app.use(helmet({
+    frameguard: process.env.NODE_ENV === "production" ? { action: "sameorigin" } : false,
     hsts: isHttpsDeployment
       ? {
           maxAge: 31536000,
           includeSubDomains: true,
         }
       : false,
-    contentSecurityPolicy: process.env.NODE_ENV === "production"
-      ? {
-          useDefaults: false,
-          directives: cspDirectives,
-        }
-      : false,
+    contentSecurityPolicy: {
+      useDefaults: false,
+      directives: cspDirectives,
+    },
   }));
 
   const allowedOrigins = [process.env.APP_ORIGIN || "http://localhost:3000"];
@@ -189,12 +235,9 @@ async function startServer() {
     credentials: true
   }));
 
-  app.use(express.json({ limit: '10mb' })); // Limit body size
-  app.use(express.urlencoded({ extended: true }));
-  app.use(cookieParser());
-
   // API Routes - Public health check
   app.get("/api/health", async (req, res) => {
+    const authBypassEnabled = process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV !== "production";
     try {
       await prisma.$queryRaw`SELECT 1`;
       const dbUrl = process.env.DATABASE_URL || "";
@@ -205,18 +248,24 @@ async function startServer() {
         }
       } catch (e) {}
       
+      const docCount = await prisma.document.count();
+      
       res.json({ 
         status: "ok", 
         databaseConnected: true, 
         environment: process.env.NODE_ENV,
+        authBypassEnabled: authBypassEnabled,
+        documentCount: docCount,
         databaseHost: hostInfo,
-        message: "Warehouse Safety Platform API running and DB connected." 
+        message: "SafeCore Enterprise API is running and database is fully connected." 
       });
     } catch (error: any) {
       res.status(500).json({ 
         status: "error", 
         databaseConnected: false, 
         environment: process.env.NODE_ENV,
+        authBypassEnabled: authBypassEnabled,
+        documentCount: null,
         message: "Database connection failed.",
         error: process.env.NODE_ENV === "development" ? error.message : undefined 
       });
@@ -302,6 +351,26 @@ async function startServer() {
 
   app.get("/api/auth/me", authenticateToken, async (req: any, res) => {
     try {
+      // [TEMPORARY DEV BYPASS LOGIC] Ensure me endpoint works correctly during bypass
+      const isBypassActive = process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV !== "production";
+      
+      if (isBypassActive) {
+        const user = await prisma.user.findUnique({
+          where: { email: "admin@warehouse.local" },
+          include: { role: true, department: true }
+        });
+        if (!user) {
+          return res.status(503).json({ error: "Auth bypass is enabled, but the seeded admin user was not found. Run the database seed." });
+        }
+        return res.json({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          role: user.role.name,
+          department: user.department.name
+        });
+      }
+
       const user = await prisma.user.findUnique({
         where: { id: req.user.id },
         include: { role: true, department: true }
@@ -413,7 +482,10 @@ async function startServer() {
         where.AND.push({
           OR: [
             { title: { contains: trimmedSearch, mode: "insensitive" } },
-            { docNumber: { contains: trimmedSearch, mode: "insensitive" } }
+            { docNumber: { contains: trimmedSearch, mode: "insensitive" } },
+            { purpose: { contains: trimmedSearch, mode: "insensitive" } },
+            { scope: { contains: trimmedSearch, mode: "insensitive" } },
+            { responsibilities: { contains: trimmedSearch, mode: "insensitive" } }
           ]
         });
       }
@@ -421,7 +493,17 @@ async function startServer() {
       if (typeId && typeId !== "all") where.AND.push({ typeId: typeId as string });
       if (categoryId && categoryId !== "all") where.AND.push({ categoryId: categoryId as string });
       if (departmentId && departmentId !== "all") where.AND.push({ departmentId: departmentId as string });
-      if (statusId && statusId !== "all") where.AND.push({ statusId: statusId as string });
+      if (statusId && statusId !== "all") {
+        if (statusId === "active") {
+          where.AND.push({
+            status: {
+              name: { in: ["Published", "Approved"] }
+            }
+          });
+        } else {
+          where.AND.push({ statusId: statusId as string });
+        }
+      }
       if (riskLevel && riskLevel !== "all") where.AND.push({ riskLevel: riskLevel as string });
 
       // If no filters added, clear the AND array to avoid empty AND: [] which is valid but cleaner if simple
@@ -621,8 +703,11 @@ async function startServer() {
 
       await logAudit("DOCUMENT_CREATE", "Document", document.id, req.user?.id);
       res.json(document);
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
+      if (error && error.code === "P2002") {
+        return res.status(400).json({ error: "A document with this number and revision already exists." });
+      }
       console.error(error);
       res.status(500).json({ error: "Failed to create document" });
     }
@@ -805,8 +890,11 @@ async function startServer() {
 
       await logAudit("DOCUMENT_UPDATE", "Document", id, req.user?.id);
       res.json(result);
-    } catch (error) {
+    } catch (error: any) {
       if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues });
+      if (error && error.code === "P2002") {
+        return res.status(400).json({ error: "A document with this number and revision already exists." });
+      }
       console.error(error);
       res.status(500).json({ error: "Failed to update document: " + (error as Error).message });
     }
@@ -954,6 +1042,54 @@ async function startServer() {
       });
     } catch (err) {
       res.status(500).json({ error: "Failed to fetch library status" });
+    }
+  });
+
+  // Diagnostics seed-status endpoint (Task 3)
+  app.get("/api/admin/seed-status", authenticateToken, authorize(["Administrator"]), async (req: any, res) => {
+    try {
+      const userCount = await prisma.user.count();
+      const roleCount = await prisma.role.count();
+      const departmentCount = await prisma.department.count();
+      const documentCount = await prisma.document.count();
+      const trainingAssignmentCount = await prisma.trainingAssignment.count();
+
+      // Counts by document type
+      const documentTypes = await prisma.documentType.findMany();
+      const countsByType = await prisma.document.groupBy({
+        by: ["typeId"],
+        _count: { id: true }
+      });
+      
+      const countByDocumentType: Record<string, number> = {};
+      for (const type of documentTypes) {
+        const matchingGroup = countsByType.find(g => g.typeId === type.id);
+        countByDocumentType[type.name] = matchingGroup?._count?.id || 0;
+      }
+
+      // Check if admin@warehouse.local exists
+      const adminUser = await prisma.user.findFirst({
+        where: { email: "admin@warehouse.local" }
+      });
+      const adminExists = !!adminUser;
+
+      // Check if master data exists
+      const categoryCount = await prisma.documentCategory.count();
+      const masterDataExists = documentTypes.length > 0 && categoryCount > 0 && departmentCount > 0 && roleCount > 0;
+
+      res.json({
+        userCount,
+        roleCount,
+        departmentCount,
+        documentCount,
+        countByDocumentType,
+        trainingAssignmentCount,
+        adminExists,
+        masterDataExists
+      });
+    } catch (err: any) {
+      console.error("Failed to fetch seed status diagnostics:", err);
+      res.status(500).json({ error: "Failed to fetch seed status diagnostics", message: err.message });
     }
   });
 

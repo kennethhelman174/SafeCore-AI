@@ -27,6 +27,8 @@ import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function AppContent() {
   const { user, isLoading, logout } = useAuth();
+  const isBypass = import.meta.env.VITE_AUTH_BYPASS === "true";
+  const isAuthenticated = user || isBypass;
 
   if (isLoading) {
     return (
@@ -43,11 +45,11 @@ function AppContent() {
     <Router>
       <Toaster position="top-right" />
       <Routes>
-        <Route path="/login" element={user ? <Navigate to="/" /> : <LoginPage />} />
+        <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <LoginPage />} />
         
         <Route 
           path="/" 
-          element={user ? <Layout onLogout={logout} /> : <Navigate to="/login" />}
+          element={isAuthenticated ? <Layout onLogout={logout} /> : <Navigate to="/login" />}
         >
           <Route index element={<Dashboard />} />
           <Route path="documents" element={<DocumentLibrary />} />

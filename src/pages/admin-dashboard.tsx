@@ -7,6 +7,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { toast } from "sonner";
 import { exportToCSV } from "../lib/exportUtils";
+import { apiRequest } from "../lib/api";
 
 export default function AdminDashboard() {
   const { token } = useAuth();
@@ -18,15 +19,15 @@ export default function AdminDashboard() {
   const fetchData = async () => {
     setIsLoading(true);
     try {
-      const [hRes, lRes] = await Promise.all([
-        fetch("/api/admin/system-health", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/admin/audit-logs", { headers: { Authorization: `Bearer ${token}` } })
+      const [healthData, logsData] = await Promise.all([
+        apiRequest("/api/admin/system-health"),
+        apiRequest("/api/admin/audit-logs")
       ]);
       
-      if (hRes.ok) setHealth(await hRes.json());
-      if (lRes.ok) setLogs(await lRes.json());
-    } catch (error) {
-      toast.error("Failed to fetch admin data");
+      if (healthData) setHealth(healthData);
+      if (logsData) setLogs(logsData);
+    } catch (error: any) {
+      toast.error(`Failed to fetch admin data: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -38,7 +39,7 @@ export default function AdminDashboard() {
 
   const handleExportLogs = () => {
     exportToCSV(logs, `SafeCore_Audit_Logs_${new Date().toISOString().split('T')[0]}`);
-    toast.success("Security logs exported");
+    toast.success("Security logs exported as CSV successfully");
   };
 
   const filteredLogs = logs.filter(l => 
@@ -68,7 +69,7 @@ export default function AdminDashboard() {
              onClick={handleExportLogs}
              className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-800 transition shadow-lg shadow-slate-900/20"
           >
-            <Download className="h-4 w-4" /> Export Security Logs
+            <Download className="h-4 w-4" /> CSV Export Security Logs
           </button>
         </div>
       </div>

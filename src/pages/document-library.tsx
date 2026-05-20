@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { Search } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Search, Info } from "lucide-react";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../lib/api";
+import { toast } from "sonner";
 
 interface Document {
   id: string;
@@ -41,8 +43,9 @@ export function DocumentLibrary() {
 
   const [filters, setFilters] = useState({
     typeId: "all",
+    categoryId: "all",
     departmentId: "all",
-    statusId: "all",
+    statusId: "active",
     riskLevel: "all"
   });
 
@@ -54,42 +57,75 @@ export function DocumentLibrary() {
     setLoading(true);
     setError(null);
     try {
+      const activeStatusId = filters.statusId;
       const params = new URLSearchParams({
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         search,
         typeId: filters.typeId,
+        categoryId: filters.categoryId,
         departmentId: filters.departmentId,
-        statusId: filters.statusId,
+        statusId: activeStatusId,
         riskLevel: filters.riskLevel
       });
 
-      const response = await fetch(`/api/documents?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+      let data = await apiRequest(`/api/documents?${params.toString()}`);
+      let docsList = data?.data || [];
+      let totalCount = data?.meta?.total || 0;
+      let totalPagesCount = data?.meta?.totalPages || 1;
 
-      if (!response.ok) throw new Error("Unable to load document library.");
+      // Fallback: If filtered by "active" but library returned 0 items, and no other filters/searches are set,
+      // let's try calling with statusId: "all" to check if there are draft documents we can display instead.
+      if (
+        docsList.length === 0 &&
+        activeStatusId === "active" &&
+        !search &&
+        filters.typeId === "all" &&
+        filters.categoryId === "all" &&
+        filters.departmentId === "all" &&
+        filters.riskLevel === "all"
+      ) {
+        const fallbackParams = new URLSearchParams({
+          page: pagination.page.toString(),
+          limit: pagination.limit.toString(),
+          search,
+          typeId: filters.typeId,
+          categoryId: filters.categoryId,
+          departmentId: filters.departmentId,
+          statusId: "all",
+          riskLevel: filters.riskLevel
+        });
+        const fallbackData = await apiRequest(`/api/documents?${fallbackParams.toString()}`);
+        if (fallbackData?.data && fallbackData.data.length > 0) {
+          docsList = fallbackData.data;
+          totalCount = fallbackData.meta?.total || 0;
+          totalPagesCount = fallbackData.meta?.totalPages || 1;
+          setFilters(prev => ({ ...prev, statusId: "all" }));
+        }
+      }
 
-      const data = await response.json();
-      setDocuments(data.data || []);
+      setDocuments(docsList);
       setPagination(prev => ({
         ...prev,
-        total: data.meta.total,
-        totalPages: data.meta.totalPages
+        total: totalCount,
+        totalPages: totalPagesCount
       }));
     } catch (err) {
-      console.error(err);
-      setError((err as Error).message);
+      console.error("Failed to load documents", err);
+      setError((err as Error).message || "Unable to load document library.");
+      toast.error(`Error loading document library: ${(err as Error).message}`);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetch("/api/master-data", { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => res.json())
+    apiRequest("/api/master-data")
       .then(setMasterData)
-      .catch(console.error);
+      .catch((err) => {
+        console.error("Master-data load failed", err);
+        toast.error("Could not load master setup data");
+      });
   }, []);
 
   useEffect(() => {
@@ -136,6 +172,13 @@ export function DocumentLibrary() {
     }
   };
 
+  const isDbEmpty = pagination.total === 0 && !search && 
+    filters.typeId === "all" && 
+    filters.categoryId === "all" && 
+    filters.departmentId === "all" && 
+    (filters.statusId === "all" || filters.statusId === "active") && 
+    filters.riskLevel === "all";
+
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -151,13 +194,13 @@ export function DocumentLibrary() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="relative">
           <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by ID or Title..."
-            className="w-full rounded border border-slate-300 bg-white py-1.5 pl-8 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="Search by ID, Title, keywords..."
+            className="w-full rounded border border-slate-300 bg-white py-1.5 pl-8 pr-4 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-700"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -166,7 +209,7 @@ export function DocumentLibrary() {
           />
         </div>
         <select 
-          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none"
+          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none font-medium text-slate-700"
           value={filters.typeId}
           onChange={(e) => handleFilterChange({ typeId: e.target.value })}
         >
@@ -174,7 +217,15 @@ export function DocumentLibrary() {
           {masterData?.types?.map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
         <select 
-          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none"
+          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none font-medium text-slate-700"
+          value={filters.categoryId}
+          onChange={(e) => handleFilterChange({ categoryId: e.target.value })}
+        >
+          <option value="all">All Categories</option>
+          {masterData?.categories?.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select 
+          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none font-medium text-slate-700"
           value={filters.departmentId}
           onChange={(e) => handleFilterChange({ departmentId: e.target.value })}
         >
@@ -182,15 +233,16 @@ export function DocumentLibrary() {
           {masterData?.departments?.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
         </select>
         <select 
-          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none"
+          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none font-medium text-slate-700"
           value={filters.statusId}
           onChange={(e) => handleFilterChange({ statusId: e.target.value })}
         >
+          <option value="active">Active Documents</option>
           <option value="all">All Statuses</option>
           {masterData?.statuses?.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         <select 
-          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none"
+          className="rounded border border-slate-300 bg-white py-1.5 px-3 text-xs focus:outline-none font-medium text-slate-700"
           value={filters.riskLevel}
           onChange={(e) => handleFilterChange({ riskLevel: e.target.value })}
         >
@@ -234,6 +286,17 @@ export function DocumentLibrary() {
             <div className="flex h-64 flex-col items-center justify-center text-center p-8">
                <p className="text-xs font-bold text-red-500 uppercase tracking-widest">{error}</p>
                <button onClick={() => fetchDocuments()} className="mt-4 text-[10px] font-bold text-blue-600 underline">RETRY CONNECTION</button>
+            </div>
+          ) : isDbEmpty ? (
+            <div className="flex h-64 flex-col items-center justify-center text-center p-8 bg-slate-50 rounded-lg m-4 border border-dashed border-slate-300">
+               <Info className="h-8 w-8 text-slate-400 mb-2" />
+               <p className="text-sm font-black text-slate-700 uppercase tracking-tight">No documents found. The database may need to be seeded.</p>
+               <p className="mt-2 text-xs text-slate-400 max-w-sm">No protocols, training modules or hazard registers currently reside in EHS library.</p>
+               <div className="mt-4 p-3 bg-blue-50/50 border border-blue-100 rounded-xl text-left max-w-sm">
+                 <p className="text-[9px] uppercase font-black tracking-widest text-blue-700">Development Environment Guideline</p>
+                 <p className="text-xs text-blue-600 mt-1">To automatically populate standard warehouse EHS SOPs, JSAs and audit templates, execute:</p>
+                 <code className="block bg-slate-900 text-slate-100 font-mono text-[10px] p-2 rounded mt-2 select-all">npm run db:seed</code>
+               </div>
             </div>
           ) : documents.length === 0 ? (
              <div className="flex h-64 flex-col items-center justify-center text-center p-8">

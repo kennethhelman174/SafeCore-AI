@@ -29,30 +29,43 @@ SafeCore is a production-ready, full-stack safety management system designed for
 cp .env.example .env
 docker compose up -d db
 npm install
-npx prisma generate
-npx prisma migrate dev
-npm run db:seed
+npm run setup:local # Automatically generates Prisma client, deploys migrations & seeds master data
 npm run dev
 ```
 
-### 🔐 Demo Credentials
-- **Admin**: `admin@warehouse.local`
-- **Password**: `SafeCore2026!`
-*(Note: Use these only for development. Change all default passwords before deployment.)*
+### 🔓 Development Auth Bypass
+To bypass login screens during local design and development iterative cycles:
+1. In your `.env` configuration file, configure:
+   ```env
+   AUTH_BYPASS=true
+   VITE_AUTH_BYPASS=true
+   ```
+2. Restart your development server. Visiting `/` immediately logs you in automatically with the **Dev Admin (Administrator)** sandbox session without presenting the login screen.
+3. To restore full authentication, simply toggle both flags back to `false` (or remove them) and restart the server.
 
-### 🛠 Local Troubleshooting
+*Security Guard:* The development auth bypass feature is strictly disabled when `NODE_ENV=production`. If `AUTH_BYPASS=true` is detected in a production build, the application server will throw a critical safety exception and refuse to boots up to prevent any security vulnerability.
 
-If login fails with **PrismaClientInitializationError**:
-- check `/api/health`
-- confirm PostgreSQL is running (`docker compose ps`)
-- confirm `DATABASE_URL` uses localhost for local dev (`postgresql://postgres:postgres@localhost:5432/workplace_safety_platform?schema=public`)
-- confirm `npx prisma generate` has run
-- confirm `npx prisma migrate dev` has run
-- confirm `npm run db:seed` has run
+### 🔐 Default Development Credentials
+If development auth bypass is disabled, you can log in with:
+*   **Admin Email**: `admin@warehouse.local`
+*   **Site Manager**: `manager@warehouse.local`
+*   **EHS Manager**: `ehs@warehouse.local`
+*   **Standard Security Password**: `SafeCore2026!`
+
+### 🔄 Database Reset & Hard Reseed
+To reset your database scheme and cleanly re-seed all master library datasets (SOPs, JSAs, Work Instructions, Users, etc.):
+```bash
+# Deletes existing tables, runs migrations, and populates master records
+npx prisma migrate reset --force
+
+# OR manually trigger seeding at any point:
+npm run db:seed
+```
 
 ### 3. Docker Deployment
 ```bash
-docker-compose up -d --build
+# Builds using the multi-stage Dockerfile and boots up the services
+docker compose up -d --build
 ```
 Note: You must pull the Ollama model manually for it to work. If you run Ollama inside Docker:
 ```bash

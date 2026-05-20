@@ -3,6 +3,8 @@ import { GraduationCap, AlertCircle, CheckCircle, Clock, Search, ChevronRight } 
 import { format } from "date-fns";
 import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../lib/api";
+import { toast } from "sonner";
 
 export default function TrainingDashboard() {
   const { token } = useAuth();
@@ -20,8 +22,7 @@ export default function TrainingDashboard() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("/api/training/dashboard", { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => res.json())
+    apiRequest("/api/training/dashboard")
       .then(d => {
         if (d && !d.error) {
           setData({
@@ -39,7 +40,8 @@ export default function TrainingDashboard() {
         setLoading(false);
       })
       .catch(err => {
-        console.error(err);
+        console.error("Training dashboard data failed", err);
+        toast.error(`Error loading training dashboard: ${err.message}`);
         setLoading(false);
       });
   }, [token]);

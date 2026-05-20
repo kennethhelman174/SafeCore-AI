@@ -68,21 +68,42 @@ class AIService {
     if (!reader) return;
 
     const decoder = new TextDecoder();
+    let buffer = "";
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
-      const chunk = decoder.decode(value);
-      try {
-        // Ollama returns NDJSON
-        const lines = chunk.split('\n').filter(Boolean);
-        for (const line of lines) {
-          const json = JSON.parse(line);
+      if (done) {
+        // Parse any remaining buffer
+        const finalLine = buffer.trim();
+        if (finalLine) {
+          try {
+            const json = JSON.parse(finalLine);
+            if (json.message?.content) {
+              onChunk(json.message.content);
+            }
+          } catch (e) {
+            console.warn("Error parsing final buffered chunk", e);
+          }
+        }
+        break;
+      }
+      
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      // The last element of split is either trailing empty string or an incomplete JSON object line.
+      // Pop it and store it back in buffer for the next chunk arrival.
+      buffer = lines.pop() || "";
+      
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        try {
+          const json = JSON.parse(trimmed);
           if (json.message?.content) {
             onChunk(json.message.content);
           }
+        } catch (e) {
+          console.warn("Error parsing chunk line", e, trimmed);
         }
-      } catch (e) {
-        console.warn("Error parsing chunk", e);
       }
     }
   }

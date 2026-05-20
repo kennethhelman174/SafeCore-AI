@@ -51,6 +51,7 @@ async function main() {
 
     console.log("\n--- Seeding Summary ---");
     const counts = {
+      users: await prisma.user.count(),
       departments: await prisma.department.count(),
       roles: await prisma.role.count(),
       ppe: await prisma.pPE.count(),
@@ -70,10 +71,33 @@ async function main() {
       contractorProcedures: await prisma.document.count({ where: { type: { name: "Contractor Procedure" } } }),
       incidentAuditTemplates: await prisma.document.count({ where: { type: { name: "Corrective Action Report" } } }),
       trainingRequiredDocs: await prisma.document.count({ where: { requiredTraining: true } }),
+      trainingAssignments: await prisma.trainingAssignment.count(),
       correctiveActionTemplates: await prisma.correctiveAction.count(),
       aiPromptTemplates: await prisma.aIPromptTemplate.count()
     };
     console.table(counts);
+
+    // Validate that admin@warehouse.local exists of type Administrator
+    const seededAdmin = await prisma.user.findFirst({
+      where: {
+        email: "admin@warehouse.local"
+      },
+      include: { role: true }
+    });
+
+    if (!seededAdmin) {
+      throw new Error("[SEED VALIDATION FAILED] Seeded admin user admin@warehouse.local was not found!");
+    } else if (seededAdmin.role.name !== "Administrator") {
+      throw new Error(`[SEED VALIDATION FAILED] Seeded admin user exists but has role ${seededAdmin.role.name}, expected Administrator`);
+    } else {
+      console.log(`\n================================================================================`);
+      console.log(`✅ [SEED VALIDATION SUCCESS] Default Admin User verified in database:`);
+      console.log(`   - Email: ${seededAdmin.email}`);
+      console.log(`   - Name: ${seededAdmin.name}`);
+      console.log(`   - Role: ${seededAdmin.role.name}`);
+      console.log(`   - Dev Demo Password: SafeCore2026! (Documented for development only)`);
+      console.log(`================================================================================\n`);
+    }
 
     // Precise Seeding Quality Indicators requested by deployment/export requirements
     const totalDocuments = await prisma.document.count();
@@ -102,6 +126,30 @@ async function main() {
     console.log(`SIF Assessment Count: ${sifCount}`);
     console.log(`SIF Assessments with SIF details: ${sifsWithDetails}`);
     console.log(`SIF Assessments with critical controls: ${sifsWithCriticalControls}`);
+    console.log("-------------------------------------\n");
+
+    // Dynamic Group Counts by Type & Category
+    const dbTypes = await prisma.documentType.findMany();
+    const docCountsByType = await prisma.document.groupBy({
+      by: ["typeId"],
+      _count: { id: true }
+    });
+    console.log("--- DOCUMENT COUNTS BY TYPE ---");
+    for (const item of docCountsByType) {
+      const typeName = dbTypes.find(t => t.id === item.typeId)?.name || "Unknown";
+      console.log(` - ${typeName}: ${item._count.id}`);
+    }
+
+    const dbCategories = await prisma.documentCategory.findMany();
+    const docCountsByCategory = await prisma.document.groupBy({
+      by: ["categoryId"],
+      _count: { id: true }
+    });
+    console.log("\n--- DOCUMENT COUNTS BY CATEGORY ---");
+    for (const item of docCountsByCategory) {
+      const catName = dbCategories.find(c => c.id === item.categoryId)?.name || "Unknown";
+      console.log(` - ${catName}: ${item._count.id}`);
+    }
     console.log("-------------------------------------\n");
 
     console.log("Master Library Seeding Complete!");

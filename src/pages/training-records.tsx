@@ -4,6 +4,7 @@ import { format, isPast } from "date-fns";
 import { toast } from "sonner";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../lib/api";
 
 export default function TrainingRecords() {
   const { token, user: authUser } = useAuth();
@@ -17,8 +18,7 @@ export default function TrainingRecords() {
   const [currentUser] = useState({ name: authUser?.name || "Admin", role: authUser?.role || "Supervisor" });
 
   useEffect(() => {
-    fetch("/api/users", { headers: { Authorization: `Bearer ${token}` } })
-      .then(res => res.json())
+    apiRequest("/api/users")
       .then(data => {
         if (Array.isArray(data)) {
           setUsers(data);
@@ -30,14 +30,16 @@ export default function TrainingRecords() {
           }
         }
       })
-      .catch(console.error);
+      .catch((err) => {
+        console.error("Users load failed", err);
+        toast.error("Could not load users list");
+      });
   }, [token]);
 
   useEffect(() => {
     if (selectedUserId) {
       setLoading(true);
-      fetch(`/api/training/records/${selectedUserId}`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(res => res.json())
+      apiRequest(`/api/training/records/${selectedUserId}`)
         .then(data => {
           setAssignments(Array.isArray(data) ? data : []);
           setLoading(false);
@@ -46,6 +48,7 @@ export default function TrainingRecords() {
           console.error(err);
           setAssignments([]);
           setLoading(false);
+          toast.error("Could not load employee training assignments");
         });
     }
   }, [selectedUserId, token]);
@@ -63,46 +66,35 @@ export default function TrainingRecords() {
 
   const handleAcknowledge = async (assignmentId: string) => {
     try {
-      const res = await fetch(`/api/training/acknowledge/${assignmentId}`, {
+      const data = await apiRequest(`/api/training/acknowledge/${assignmentId}`, {
          method: "POST",
-         headers: { 
-           "Content-Type": "application/json",
-           "Authorization": `Bearer ${token}`
-         },
-         body: JSON.stringify({ userId: selectedUserId })
+         body: { userId: selectedUserId }
       });
-      if (!res.ok) throw new Error();
-      const data = await res.json();
       toast.success(data?.status === "pending_verification" ? "Sent for supervisor verification" : "Training completed");
       
       // refresh
-      fetch(`/api/training/records/${selectedUserId}`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(res => res.json())
-        .then(data => setAssignments(Array.isArray(data) ? data : []));
-    } catch(err) {
-      toast.error("Failed to acknowledge");
+      apiRequest(`/api/training/records/${selectedUserId}`)
+        .then(data => setAssignments(Array.isArray(data) ? data : []))
+        .catch(console.error);
+    } catch(err: any) {
+      toast.error(`Failed to acknowledge training: ${err.message}`);
     }
   };
 
   const handleVerify = async (assignmentId: string) => {
     try {
-      const res = await fetch(`/api/training/verify/${assignmentId}`, {
+      await apiRequest(`/api/training/verify/${assignmentId}`, {
          method: "POST",
-         headers: { 
-           "Content-Type": "application/json",
-           "Authorization": `Bearer ${token}`
-         },
-         body: JSON.stringify({ supervisorName: currentUser.name, notes: "Verified competency in field" })
+         body: { supervisorName: currentUser.name, notes: "Verified competency in field" }
       });
-      if (!res.ok) throw new Error();
       toast.success("Competency verified");
       
       // refresh
-      fetch(`/api/training/records/${selectedUserId}`, { headers: { Authorization: `Bearer ${token}` } })
-        .then(res => res.json())
-        .then(data => setAssignments(Array.isArray(data) ? data : []));
-    } catch(err) {
-      toast.error("Failed to verify");
+      apiRequest(`/api/training/records/${selectedUserId}`)
+        .then(data => setAssignments(Array.isArray(data) ? data : []))
+        .catch(console.error);
+    } catch(err: any) {
+      toast.error(`Failed to verify training: ${err.message}`);
     }
   };
 

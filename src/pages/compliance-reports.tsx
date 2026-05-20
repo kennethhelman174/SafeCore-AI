@@ -7,6 +7,8 @@ import {
 import { format } from "date-fns";
 import { exportToCSV, exportToExcel, exportToPDF } from "../lib/exportUtils";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../lib/api";
+import { toast } from "sonner";
 
 export default function ComplianceReports() {
   const { token } = useAuth();
@@ -33,13 +35,13 @@ export default function ComplianceReports() {
     if (activeTab === "documents") endpoint = "/api/documents?limit=1000";
 
     try {
-      const res = await fetch(endpoint, { headers: { Authorization: `Bearer ${token}` } });
-      const json = await res.json();
+      const json = await apiRequest(endpoint);
       // Handle paginated documents wrapper
-      const actualData = (activeTab === "documents" && json.data) ? json.data : json;
+      const actualData = (activeTab === "documents" && json?.data) ? json.data : json;
       setData(Array.isArray(actualData) ? actualData : []);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
+      toast.error(`Could not retrieve compliance intelligence data: ${e.message}`);
     } finally {
       setLoading(false);
     }
@@ -104,13 +106,13 @@ export default function ComplianceReports() {
              onClick={() => handleExport("csv")}
              className="px-4 py-2 border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-tight text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition"
           >
-            <Download className="h-3 w-3" /> CSV
+            <Download className="h-3 w-3" /> CSV Export (Raw Data)
           </button>
           <button 
              onClick={() => handleExport("excel")}
              className="px-4 py-2 border border-slate-200 rounded-lg text-[10px] font-black uppercase tracking-tight text-slate-600 hover:bg-slate-50 flex items-center gap-2 transition"
           >
-            <Download className="h-3 w-3" /> Excel
+            <Download className="h-3 w-3" /> CSV Export (Standard)
           </button>
           <button 
              onClick={() => fetchData()}

@@ -22,9 +22,24 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
-  const [isLoading, setIsLoading] = useState(true);
+  // Temporary development-only bypass detection
+  const isBypass = import.meta.env.VITE_AUTH_BYPASS === "true";
+
+  const [user, setUser] = useState<User | null>(
+    isBypass
+      ? {
+          id: "dev-admin-id",
+          email: "dev.admin@safecore.local",
+          name: "Dev Admin",
+          role: "Administrator",
+          department: "Management",
+        }
+      : null
+  );
+  const [token, setToken] = useState<string | null>(
+    isBypass ? "dev-bypass-token" : localStorage.getItem("token")
+  );
+  const [isLoading, setIsLoading] = useState(!isBypass);
 
   // Sync token with AIService
   useEffect(() => {
@@ -42,6 +57,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const checkAuth = async () => {
+      // Temporary development-only auth bypass guard
+      if (import.meta.env.VITE_AUTH_BYPASS === "true") {
+        setIsLoading(false);
+        return;
+      }
       const storedToken = localStorage.getItem("token");
       if (storedToken) {
         try {
@@ -82,13 +102,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch("/api/auth/logout", {
-        method: "POST",
-        credentials: "include",
-      });
+      if (import.meta.env.VITE_AUTH_BYPASS !== "true") {
+        await fetch("/api/auth/logout", {
+          method: "POST",
+          credentials: "include",
+        });
+      }
     } catch (e) {
       console.warn("Logout request failed", e);
     }
+
+    // Temporary development-only auth bypass logout behavior (skip redirecting to login)
+    if (import.meta.env.VITE_AUTH_BYPASS === "true") {
+      setUser({
+        id: "dev-admin-id",
+        email: "dev.admin@safecore.local",
+        name: "Dev Admin",
+        role: "Administrator",
+        department: "Management"
+      });
+      setToken("dev-bypass-token");
+      toast.info("Development Auth Bypass active: Resetting sandbox session");
+      return;
+    }
+
     localStorage.removeItem("token");
     setToken(null);
     setUser(null);

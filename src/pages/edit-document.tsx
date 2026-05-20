@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { DocumentBuilder } from "../components/DocumentBuilder";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest } from "../lib/api";
+import { toast } from "sonner";
 
 export function EditDocument() {
   const { id } = useParams();
@@ -10,15 +12,16 @@ export function EditDocument() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`/api/documents/${id}`, {
-      headers: { Authorization: `Bearer ${token}` }
-    })
-      .then(res => res.json())
+    apiRequest(`/api/documents/${id}`)
       .then(data => {
         setDoc(data);
         setLoading(false);
       })
-      .catch(console.error);
+      .catch(err => {
+        console.error("Failed to load document", err);
+        toast.error(`Error loading document: ${err.message}`);
+        setLoading(false);
+      });
   }, [id]);
 
   if (loading) return <div className="p-8 text-center uppercase text-xs font-bold text-slate-400">Loading Record...</div>;

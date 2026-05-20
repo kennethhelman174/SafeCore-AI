@@ -183,18 +183,139 @@ export function Layout({ onLogout }: { onLogout: () => void }) {
 
       {/* Main Content Area */}
       <main className="flex flex-1 flex-col overflow-hidden">
+        {import.meta.env.VITE_AUTH_BYPASS === "true" && (
+          <div className="bg-amber-500 text-slate-950 px-4 py-1.5 text-center text-[10px] font-black tracking-widest uppercase shadow-sm flex items-center justify-center gap-2 z-20">
+            <span className="animate-pulse">⚠️</span> Development Auth Bypass Enabled <span className="animate-pulse">⚠️</span>
+          </div>
+        )}
         {/* Header */}
-        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-8 shadow-sm z-10">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-black tracking-tighter text-slate-800 uppercase">Enterprise Warehouse Safety</h1>
-            <div className="h-5 w-[1px] bg-slate-200"></div>
-            <span className="rounded-lg bg-emerald-50 border border-emerald-100 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-emerald-600 flex items-center gap-1.5 shadow-sm">
-              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
+        <header className="flex h-16 items-center justify-between border-b border-slate-200 bg-white px-4 sm:px-8 shadow-sm z-10">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <Sheet>
+              <SheetTrigger className="sm:hidden p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center cursor-pointer" aria-label="Open Navigation Menu">
+                <Menu className="h-5 w-5" />
+              </SheetTrigger>
+              <SheetContent side="left" className="w-64 bg-slate-900 border-0 p-0 text-white flex flex-col h-full z-[1000]">
+                <div className="flex items-center gap-3 p-6 pb-4 border-b border-slate-800">
+                  <div className="flex h-8 w-8 items-center justify-center rounded bg-blue-500 shadow-lg shadow-blue-500/20">
+                    <Shield className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="text-lg font-black tracking-tighter text-white">SAFECORE</span>
+                </div>
+                <nav className="flex-1 space-y-1 px-4 py-4 overflow-y-auto no-scrollbar">
+                  <div className="px-3 pb-2 text-[10px] font-black uppercase tracking-widest text-slate-500">Operation Center</div>
+                  {navItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = isNavActive(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        to={item.href}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                          isActive 
+                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
+                            : "text-slate-400 hover:text-white hover:bg-slate-800"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.name}
+                      </Link>
+                    );
+                  })}
+                  
+                  <div className="px-3 pb-2 pt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Competency Tracking</div>
+                  {trainingItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = isNavActive(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        to={item.href}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                          isActive 
+                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
+                            : "text-slate-400 hover:text-white hover:bg-slate-800"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.name}
+                      </Link>
+                    );
+                  })}
+
+                  <div className="px-3 pb-2 pt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Enterprise Analytics</div>
+                  {reportItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = isNavActive(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        to={item.href}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                          isActive 
+                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
+                            : "text-slate-400 hover:text-white hover:bg-slate-800"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.name}
+                      </Link>
+                    );
+                  })}
+                  
+                  <div className="px-3 pb-2 pt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Safety Assets</div>
+                  {safetyItems.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = isNavActive(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        to={item.href}
+                        className={`flex items-center gap-3 rounded-xl px-4 py-2 text-xs font-bold transition-all ${
+                          isActive 
+                            ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" 
+                            : "text-slate-400 hover:text-white hover:bg-slate-800"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {item.name}
+                      </Link>
+                    );
+                  })}
+
+                  <div className="px-3 pb-2 pt-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Infrastructure</div>
+                  {isAdmin && (
+                    <Link to="/admin" className={`flex items-center gap-3 rounded-xl px-4 py-2 text-xs font-bold transition-all ${isNavActive('/admin') ? "bg-amber-600 text-white shadow-lg shadow-amber-600/20" : "text-amber-500 hover:text-white hover:bg-slate-800"}`}>
+                      <ShieldAlert className="h-4 w-4" />
+                      Security & Health
+                    </Link>
+                  )}
+                  <Link to="/ai-settings" className={`flex items-center gap-3 rounded-xl px-4 py-2 text-xs font-bold transition-all ${isNavActive('/ai-settings') ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-slate-400 hover:text-white hover:bg-slate-800"}`}>
+                    <BrainCircuit className="h-4 w-4" />
+                    AI Systems Engine
+                  </Link>
+                </nav>
+                <div className="p-4 border-t border-slate-800 bg-slate-950/20">
+                  <button 
+                    onClick={onLogout}
+                    className="w-full flex items-center justify-between px-3 py-2 text-xs font-bold text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-xl transition"
+                  >
+                    <span>Secure Sign Out</span>
+                    <LogOut className="h-4 w-4" />
+                  </button>
+                </div>
+              </SheetContent>
+            </Sheet>
+
+            <h1 className="text-base sm:text-xl font-black tracking-tighter text-slate-800 uppercase truncate">Enterprise Warehouse Safety</h1>
+            <div className="h-5 w-[1px] bg-slate-200 hidden xs:block"></div>
+            <span className="rounded-lg bg-emerald-50 border border-emerald-100 px-2 sm:px-3 py-1 text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-emerald-600 flex items-center gap-1 sm:gap-1.5 shadow-sm whitespace-nowrap">
+              <div className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-emerald-500 animate-pulse"></div>
               {user?.department || 'SECURE NODE'}
             </span>
           </div>
-          <div className="flex items-center gap-6">
-            <div className="relative">
+          <div className="flex items-center gap-3 sm:gap-6">
+            <div className="relative hidden md:block">
               <input 
                 type="text" 
                 placeholder="Search protocols..." 
@@ -207,7 +328,7 @@ export function Layout({ onLogout }: { onLogout: () => void }) {
             </div>
             <Button 
                onClick={() => navigate("/documents/new")}
-               className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-[10px] px-6 rounded-xl shadow-lg shadow-blue-600/20"
+               className="bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-[9px] sm:text-[10px] px-3 sm:px-6 py-2 rounded-xl h-auto shadow-lg shadow-blue-600/20 shrink-0"
             >
               + DEPLOY NEW PROTOCOL
             </Button>

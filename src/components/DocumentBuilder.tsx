@@ -8,6 +8,7 @@ import {
 import { toast } from "sonner";
 import { aiService } from "../services/aiService";
 import { useAuth } from "../contexts/AuthContext";
+import { apiRequest, ApiError } from "../lib/api";
 
 interface BuilderProps {
   initialData?: any;
@@ -22,6 +23,12 @@ export function DocumentBuilder({ initialData, mode, docId }: BuilderProps) {
   const [users, setUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("general");
+
+  // AI Hazard Suggestion States
+  const [suggestedHazards, setSuggestedHazards] = useState<string[]>([]);
+  const [showAiHazardsModal, setShowAiHazardsModal] = useState(false);
+  const [selectedSuggestedHazards, setSelectedSuggestedHazards] = useState<string[]>([]);
+
 
   const [formData, setFormData] = useState({
     title: initialData?.title || "",
@@ -71,21 +78,65 @@ export function DocumentBuilder({ initialData, mode, docId }: BuilderProps) {
 
   const [aiLoading, setAiLoading] = useState<string | null>(null);
 
+  const findClosestHazardId = (suggestion: string): string | null => {
+    if (!masterData?.hazards) return null;
+    const sugLower = suggestion.toLowerCase();
+    const match = masterData.hazards.find((h: any) => 
+      sugLower.includes(h.name.toLowerCase()) || h.name.toLowerCase().includes(sugLower)
+    );
+    return match ? match.id : null;
+  };
+
+  const applySelectedAiHazards = () => {
+    const matchedIds: string[] = [];
+    selectedSuggestedHazards.forEach(sug => {
+      const matchId = findClosestHazardId(sug);
+      if (matchId && !matchedIds.includes(matchId)) {
+        matchedIds.push(matchId);
+      }
+    });
+
+    if (matchedIds.length === 0) {
+      toast.warning("No matching master library hazards found for your selections. You can link them manually below.");
+    } else {
+      setFormData(f => {
+        const next = [...f.hazardIds];
+        matchedIds.forEach(id => {
+          if (!next.includes(id)) {
+            next.push(id);
+          }
+        });
+        return { ...f, hazardIds: next };
+      });
+      toast.success(`Linked ${matchedIds.length} hazards to document!`);
+    }
+    setShowAiHazardsModal(false);
+  };
+
   const handleAIHazards = async () => {
-    if (!formData.title) return toast.error("Title required");
+    if (!formData.title) return toast.error("Title required before AI analysis");
     setAiLoading("hazards");
     try {
-       const res = await aiService.identifyHazards(formData.title);
-       if (res?.message?.content) {
-          const content = res.message.content;
-          toast.success("AI Hazards suggested! Check the sidebar for manual selection based on these ideas.");
-          // We could auto-match IDs here if we had a mapping, but for now we inform the user
-          console.log("AI Hazards:", content);
-       }
+      const res = await aiService.identifyHazards(formData.title);
+      if (res?.message?.content) {
+        const content = res.message.content;
+        const lines = content.split('\n')
+          .map((l: string) => l.trim().replace(/^[\d+.\-*\s]+/, '').trim())
+          .filter((l: string) => l.length > 3);
+
+        if (lines.length > 0) {
+          setSuggestedHazards(lines);
+          setSelectedSuggestedHazards(lines);
+          setShowAiHazardsModal(true);
+          toast.success("AI suggested hazard landscape loaded!");
+        } else {
+          toast.info("AI returned no scannable hazard lines. Please try again.");
+        }
+      }
     } catch (e) {
-       toast.error("AI Error");
+      toast.error("AI Suggestion Unavailable: The AI modeling server (Ollama) is currently unreachable. Please make sure the service is running or check your AI Settings.");
     } finally {
-       setAiLoading(null);
+      setAiLoading(null);
     }
   };
 
@@ -343,6 +394,107 @@ export function DocumentBuilder({ initialData, mode, docId }: BuilderProps) {
 
   return (
     <div className="flex h-full flex-col">
+      {/* AI Hazard Suggestions Modal */}
+      {showAiHazardsModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[999] flex items-center justify-center p-4" id="ai-hazards-modal">
+          <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden border border-slate-100 flex flex-col max-h-[85vh]">
+            <div className="bg-red-600 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-amber-300 animate-pulse" />
+                <h3 className="font-black uppercase tracking-wider text-sm">AI Hazard Analysis</h3>
+              </div>
+              <button 
+                onClick={() => setShowAiHazardsModal(false)}
+                className="text-white hover:text-red-100 font-bold text-xs"
+              >
+                ✕ Close
+              </button>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 space-y-4">
+              <p className="text-xs text-slate-500">
+                The AI analyzed your task <strong className="text-slate-800">"{formData.title}"</strong> and identified the following hazard candidates. Select which hazards you want to link to your safety document:
+              </p>
+              
+              <div className="space-y-2">
+                {suggestedHazards.map((suggestion, index) => {
+                  const matchedId = findClosestHazardId(suggestion);
+                  const dbMatch = masterData?.hazards?.find((h: any) => h.id === matchedId);
+                  const isSelected = selectedSuggestedHazards.includes(suggestion);
+                  
+                  return (
+                    <div 
+                      key={index}
+                      onClick={() => {
+                        setSelectedSuggestedHazards(prev => 
+                          prev.includes(suggestion) 
+                            ? prev.filter(s => s !== suggestion) 
+                            : [...prev, suggestion]
+                        );
+                      }}
+                      className={`p-3 rounded-lg border text-xs cursor-pointer transition-all flex items-start gap-3 ${
+                        isSelected 
+                          ? "bg-red-50 border-red-200 text-red-900 shadow-sm" 
+                          : "bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected}
+                        onChange={() => {}} // Click handler on card handles state
+                        className="mt-0.5 rounded border-slate-300 text-red-600 focus:ring-red-500"
+                      />
+                      <div className="flex-1 space-y-1">
+                        <span className="font-semibold block">{suggestion}</span>
+                        {dbMatch ? (
+                          <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-[9px] font-extrabold tracking-wide uppercase px-1.5 py-0.5 rounded-full">
+                            ✓ Matches master library: "{dbMatch.name}"
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-amber-50 text-amber-700 text-[9px] font-extrabold tracking-wide uppercase px-1.5 py-0.5 rounded-full">
+                            ⚠ No direct master library match
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            <div className="bg-slate-50 p-4 border-t border-slate-100 flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setShowAiHazardsModal(false)}
+                className="px-4 py-2 text-xs font-black uppercase text-slate-500 hover:text-slate-800"
+              >
+                Dismiss
+              </button>
+              
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleAIHazards}
+                  disabled={!!aiLoading}
+                  className="px-3 py-2 text-xs font-black uppercase border border-slate-200 text-slate-600 hover:bg-slate-100 rounded flex items-center gap-1"
+                >
+                  <RefreshCw className={`h-3 w-3 ${aiLoading ? "animate-spin" : ""}`} />
+                  Retry
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={applySelectedAiHazards}
+                  className="px-4 py-2 text-xs font-black uppercase bg-red-600 hover:bg-red-700 text-white rounded shadow-md"
+                >
+                  Add Selected
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between border-b pb-4 mb-4">
         <div className="flex items-center gap-4">
           <Link to="/documents" className="rounded-full p-2 hover:bg-slate-100 transition-colors">

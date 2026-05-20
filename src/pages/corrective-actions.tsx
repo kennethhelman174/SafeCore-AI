@@ -9,6 +9,8 @@ import { motion, AnimatePresence } from "motion/react";
 import { aiService } from "../services/aiService";
 import { useAuth } from "../contexts/AuthContext";
 
+import { apiRequest } from "../lib/api";
+
 export default function CorrectiveActionsPage() {
   const { token } = useAuth();
   const [actions, setActions] = useState<any[]>([]);
@@ -59,22 +61,21 @@ export default function CorrectiveActionsPage() {
 
   const fetchDocuments = async () => {
     try {
-      const res = await fetch("/api/documents/options", { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
+      const data = await apiRequest("/api/documents/options");
       setDocuments(data || []);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
+      toast.error(`Could not load related document options: ${err.message}`);
     }
   };
 
   const fetchActions = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/corrective-actions", { headers: { Authorization: `Bearer ${token}` } });
-      const data = await res.json();
-      setActions(data);
-    } catch (err) {
-      toast.error("Failed to load actions");
+      const data = await apiRequest("/api/corrective-actions");
+      setActions(data || []);
+    } catch (err: any) {
+      toast.error(`Failed to load corrective actions: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -83,42 +84,30 @@ export default function CorrectiveActionsPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const res = await fetch("/api/corrective-actions", {
+      await apiRequest("/api/corrective-actions", {
         method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify(formData)
+        body: formData
       });
-      if (res.ok) {
-        toast.success("Corrective action created");
-        setIsAdding(false);
-        fetchActions();
-        setFormData({ title: "", description: "", priority: "medium", dueDate: "", assigneeId: "", documentId: "" });
-      }
-    } catch (err) {
-      toast.error("Error creating action");
+      toast.success("Corrective action created");
+      setIsAdding(false);
+      fetchActions();
+      setFormData({ title: "", description: "", priority: "medium", dueDate: "", assigneeId: "", documentId: "" });
+    } catch (err: any) {
+      toast.error(`Error creating action: ${err.message}`);
     }
   };
 
   const handleStatusUpdate = async (id: string, status: string) => {
     try {
-      const res = await fetch(`/api/corrective-actions/${id}`, {
+      await apiRequest(`/api/corrective-actions/${id}`, {
         method: "PUT",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({ status })
+        body: { status }
       });
-      if (res.ok) {
-        toast.success(`Action marked as ${status}`);
-        fetchActions();
-        if (selectedAction?.id === id) setSelectedAction(null);
-      }
-    } catch (err) {
-      toast.error("Error updating status");
+      toast.success(`Action marked as ${status}`);
+      fetchActions();
+      if (selectedAction?.id === id) setSelectedAction(null);
+    } catch (err: any) {
+      toast.error(`Error updating status: ${err.message}`);
     }
   };
 
