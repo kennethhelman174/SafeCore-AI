@@ -16,7 +16,13 @@ import { PrismaClient } from "@prisma/client";
 
 import cookieParser from "cookie-parser";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasources: {
+    db: {
+      url: `file:${path.join(process.cwd(), "prisma", "dev.db")}`
+    }
+  }
+});
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET && process.env.NODE_ENV === "production") {
@@ -273,7 +279,7 @@ async function startServer() {
        if (error.name === "PrismaClientInitializationError") {
          return res.status(500).json({ error: "Database connection failed. Check DATABASE_URL, PostgreSQL status, Prisma generate, migrations, and seed." });
        }
-       res.status(500).json({ error: "Login failed" });
+        res.status(500).json({ error: "Login failed" });
     }
   });
 
