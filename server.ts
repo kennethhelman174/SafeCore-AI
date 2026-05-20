@@ -139,8 +139,37 @@ async function startServer() {
   app.set('trust proxy', 1);
 
   // Global Security Headers
+  const appOrigin = process.env.APP_ORIGIN || "http://localhost:3000";
+  const isHttpsDeployment = appOrigin.startsWith("https://");
+
+  const cspDirectives: any = {
+    defaultSrc: ["'self'"],
+    baseUri: ["'self'"],
+    fontSrc: ["'self'", "https:", "data:"],
+    formAction: ["'self'"],
+    frameAncestors: ["'self'"],
+    imgSrc: ["'self'", "data:", "https:", "blob:"],
+    objectSrc: ["'none'"],
+    scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
+    scriptSrcAttr: ["'none'"],
+    styleSrc: ["'self'", "https:", "'unsafe-inline'"],
+    connectSrc: ["'self'", "https:", "wss:", "ws:"],
+  };
+
+  if (isHttpsDeployment) {
+    cspDirectives.upgradeInsecureRequests = [];
+  }
+
   app.use(helmet({
-    contentSecurityPolicy: process.env.NODE_ENV === "production" ? undefined : false,
+    hsts: isHttpsDeployment
+      ? {
+          maxAge: 31536000,
+          includeSubDomains: true,
+        }
+      : false,
+    contentSecurityPolicy: process.env.NODE_ENV === "production"
+      ? { directives: cspDirectives }
+      : false,
   }));
 
   const allowedOrigins = [process.env.APP_ORIGIN || "http://localhost:3000"];
