@@ -4,8 +4,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/setup-sqlite.js && tsx server.ts",
-    "build": "node scripts/restore-postgres.js && npx prisma generate && node scripts/guard-db.mjs && vite build && esbuild server.ts --bundle --platform=node --outfile=dist/server.cjs --format=cjs",
+    "dev": "tsx server.ts",
+    "build": "npx prisma generate && node scripts/guard-db.mjs && vite build && esbuild server.ts --bundle --platform=node --packages=external --outfile=dist/server.cjs --format=cjs",
     "start": "node dist/server.cjs",
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",

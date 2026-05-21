@@ -2,6 +2,16 @@
  * Shared API Client Helper
  */
 
+let globalAuthDisabledCache: boolean | null = null;
+
+export function setGlobalAuthDisabled(disabled: boolean) {
+  globalAuthDisabledCache = disabled;
+}
+
+export function getGlobalAuthDisabled(): boolean {
+  return globalAuthDisabledCache === true;
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -49,12 +59,30 @@ export async function apiRequest(url: string, options: ApiRequestOptions = {}) {
     }
 
     // Handle 401 or 403 cleanly in non-bypass environments
-    if ((res.status === 401 || res.status === 403) && import.meta.env.VITE_AUTH_BYPASS !== "true") {
-      console.warn(`Auth session error (${res.status}): Redirecting to login`);
-      localStorage.removeItem("token");
-      // Prevent infinite redirect loops if we are already on /login
-      if (!window.location.pathname.startsWith("/login")) {
-        window.location.href = "/login?expired=true";
+    if (res.status === 401 || res.status === 403) {
+      const isSessionError = res.status === 401 || errorMsg.toLowerCase().includes("session") || errorMsg.toLowerCase().includes("expired");
+      
+      if (isSessionError && !url.includes("/api/auth/login")) {
+        if (globalAuthDisabledCache === null && url !== "/api/config") {
+          try {
+            const configRes = await fetch("/api/config");
+            if (configRes.ok) {
+              const configData = await configRes.json();
+              globalAuthDisabledCache = configData.authDisabled;
+            }
+          } catch {
+            globalAuthDisabledCache = false;
+          }
+        }
+
+        if (globalAuthDisabledCache !== true) {
+          console.warn(`Auth session error (${res.status}): Redirecting to login`);
+          localStorage.removeItem("token");
+          // Prevent infinite redirect loops if we are already on /login
+          if (!window.location.pathname.startsWith("/login")) {
+            window.location.href = "/login?expired=true";
+          }
+        }
       }
     }
 

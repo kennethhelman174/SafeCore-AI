@@ -7,6 +7,11 @@ if (!dbUrl) {
   process.exit(1);
 }
 
+if (dbUrl.startsWith("file:") || !dbUrl.includes("postgresql")) {
+  console.log("✅ Using SQLite database. Connection is inherently local and ready.");
+  process.exit(0);
+}
+
 try {
   const url = new URL(dbUrl);
   const host = url.hostname;

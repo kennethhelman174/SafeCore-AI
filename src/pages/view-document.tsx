@@ -18,7 +18,6 @@ import {
 import { toast } from "sonner";
 import { exportToPDF } from "../lib/exportUtils";
 import DocumentPrintView from "../components/DocumentPrintView";
-import { useReactToPrint } from "react-to-print";
 import { apiRequest } from "../lib/api";
 
 import { useAuth } from "../contexts/AuthContext";
@@ -28,16 +27,25 @@ export function ViewDocument() {
   const navigate = useNavigate();
   const { token, user: currentUser } = useAuth();
   const printRef = useRef<HTMLDivElement>(null);
+  const exportRef = useRef<HTMLDivElement>(null);
   const [doc, setDoc] = useState<any>(null);
   const [workflows, setWorkflows] = useState<any[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [selectedReviewers, setSelectedReviewers] = useState<string[]>([]);
   const [comment, setComment] = useState("");
+  const [isCreatingRevision, setIsCreatingRevision] = useState(false);
 
-  const handlePrint = useReactToPrint({
-    contentRef: printRef,
-    documentTitle: doc ? `${doc.docNumber}_${doc.title}` : "Document",
-  });
+  const handlePrint = () => {
+    if (!doc) {
+      toast.error("Document is missing, cannot print");
+      return;
+    }
+    const originalTitle = document.title;
+    document.title = `${doc.docNumber}_${doc.title.replace(/\s+/g, "_")}`;
+    window.print();
+    document.title = originalTitle;
+    toast.success("Print dialog opened");
+  };
 
   useEffect(() => {
     fetchData();
@@ -133,6 +141,7 @@ export function ViewDocument() {
     const changeSummary = prompt("Enter change summary for new revision:");
     if (!changeSummary) return;
 
+    setIsCreatingRevision(true);
     try {
       const data = await apiRequest(`/api/documents/${id}/create-revision`, {
         method: "POST",
@@ -141,7 +150,7 @@ export function ViewDocument() {
         },
       });
       toast.success("Revision created successfully");
-      const targetId = data.id || (data.document && data.document.id);
+      const targetId = data?.id || data?.document?.id || data?.newDocument?.id;
       if (targetId) {
         navigate(`/documents/${targetId}/edit`);
       } else {
@@ -149,6 +158,8 @@ export function ViewDocument() {
       }
     } catch (e: any) {
       toast.error(e.message || "Failed to create revision");
+    } finally {
+      setIsCreatingRevision(false);
     }
   };
 
@@ -187,7 +198,17 @@ export function ViewDocument() {
             <Download className="h-4 w-4" /> EXPORT PDF
           </button>
           <button
-            onClick={handlePrint}
+            onClick={() => {
+              if (!doc) {
+                toast.error("Document is missing, cannot print");
+                return;
+              }
+              if (!printRef.current) {
+                toast.error("Print target element not found");
+                return;
+              }
+              handlePrint();
+            }}
             className="flex items-center gap-2 rounded bg-slate-100 px-4 py-2 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-200 border border-slate-200"
           >
             <Printer className="h-4 w-4" /> PRINT
@@ -197,9 +218,10 @@ export function ViewDocument() {
             ["Administrator", "EHS Manager", "EHS Engineer", "Operations Manager", "Warehouse Manager", "Site Leader"].includes(currentUser.role) && (
               <button
                 onClick={handleCreateRevision}
-                className="flex items-center gap-2 rounded bg-amber-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-600"
+                disabled={isCreatingRevision}
+                className="flex items-center gap-2 rounded bg-amber-500 px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <History className="h-4 w-4" /> CREATE REVISION
+                <History className={`h-4 w-4 ${isCreatingRevision ? "animate-spin" : ""}`} /> {isCreatingRevision ? "CREATING..." : "CREATE REVISION"}
               </button>
             )}
           {!isLocked && (
@@ -927,6 +949,13 @@ export function ViewDocument() {
 
       <div 
         ref={printRef}
+        className="print-source"
+      >
+        <DocumentPrintView document={doc} />
+      </div>
+
+      <div 
+        ref={exportRef}
         className="export-only" 
         id="printable-doc-content"
       >

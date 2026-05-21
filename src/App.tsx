@@ -26,9 +26,8 @@ import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 
 function AppContent() {
-  const { user, isLoading, logout } = useAuth();
-  const isBypass = import.meta.env.VITE_AUTH_BYPASS === "true";
-  const isAuthenticated = user || isBypass;
+  const { user, isLoading, logout, authDisabled } = useAuth();
+  const isAuthenticated = !!user;
 
   if (isLoading) {
     return (
@@ -44,6 +43,11 @@ function AppContent() {
   return (
     <Router>
       <Toaster position="top-right" />
+      {authDisabled && (
+        <div className="bg-amber-500 text-black text-center font-bold text-xs py-1 tracking-wider uppercase z-50 relative">
+          Authentication Disabled — Development/Test Mode
+        </div>
+      )}
       <Routes>
         <Route path="/login" element={isAuthenticated ? <Navigate to="/" /> : <LoginPage />} />
         

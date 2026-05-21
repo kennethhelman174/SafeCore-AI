@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { processSyncQueue } from "../lib/offlineSync";
 import { aiService } from "../services/aiService";
+import { setGlobalAuthDisabled } from "../lib/api";
 
 interface User {
   id: string;
@@ -17,29 +18,16 @@ interface AuthContextType {
   login: (token: string, user: User) => void;
   logout: () => void;
   isLoading: boolean;
+  authDisabled: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Temporary development-only bypass detection
-  const isBypass = import.meta.env.VITE_AUTH_BYPASS === "true";
-
-  const [user, setUser] = useState<User | null>(
-    isBypass
-      ? {
-          id: "dev-admin-id",
-          email: "dev.admin@safecore.local",
-          name: "Dev Admin",
-          role: "Administrator",
-          department: "Management",
-        }
-      : null
-  );
-  const [token, setToken] = useState<string | null>(
-    isBypass ? "dev-bypass-token" : localStorage.getItem("token")
-  );
-  const [isLoading, setIsLoading] = useState(!isBypass);
+  const [authDisabled, setAuthDisabled] = useState(false);
+  const [user, setUser] = useState<User | null>(null);
+  const [token, setToken] = useState<string | null>(localStorage.getItem("token"));
+  const [isLoading, setIsLoading] = useState(true);
 
   // Sync token with AIService
   useEffect(() => {
@@ -57,11 +45,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const checkAuth = async () => {
-      // Temporary development-only auth bypass guard
-      if (import.meta.env.VITE_AUTH_BYPASS === "true") {
+      let isConfigDisabled = false;
+      try {
+        const configRes = await fetch("/api/config");
+        if (configRes.ok) {
+          const configData = await configRes.json();
+          isConfigDisabled = configData.authDisabled;
+          setAuthDisabled(isConfigDisabled);
+          setGlobalAuthDisabled(isConfigDisabled);
+        }
+      } catch (err) {
+        console.error("Failed to load runtime config:", err);
+      }
+
+      if (isConfigDisabled) {
+        setUser({
+          id: "dev-admin-id",
+          email: "admin@warehouse.local",
+          name: "Dev Admin",
+          role: "Administrator",
+          department: "Management",
+        });
+        setToken("dev-bypass-token");
         setIsLoading(false);
         return;
       }
+
       const storedToken = localStorage.getItem("token");
       if (storedToken) {
         try {
@@ -102,7 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     try {
-      if (import.meta.env.VITE_AUTH_BYPASS !== "true") {
+      if (!authDisabled) {
         await fetch("/api/auth/logout", {
           method: "POST",
           credentials: "include",
@@ -112,11 +121,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.warn("Logout request failed", e);
     }
 
-    // Temporary development-only auth bypass logout behavior (skip redirecting to login)
-    if (import.meta.env.VITE_AUTH_BYPASS === "true") {
+    if (authDisabled) {
       setUser({
         id: "dev-admin-id",
-        email: "dev.admin@safecore.local",
+        email: "admin@warehouse.local",
         name: "Dev Admin",
         role: "Administrator",
         department: "Management"
@@ -135,7 +143,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, token, login, logout, isLoading, authDisabled }}>
       {children}
     </AuthContext.Provider>
   );

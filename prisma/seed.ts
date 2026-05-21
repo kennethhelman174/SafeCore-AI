@@ -152,6 +152,11 @@ async function main() {
     }
     console.log("-------------------------------------\n");
 
+    if (totalDocuments < 308) throw new Error(`[SEED VALIDATION] Expected at least 308 documents but got ${totalDocuments}`);
+    if (sopCount < 80) throw new Error(`[SEED VALIDATION] Expected at least 80 SOPs but got ${sopCount}`);
+    if (wiCount < 50) throw new Error(`[SEED VALIDATION] Expected at least 50 Work Instructions but got ${wiCount}`);
+    if (jsaCount < 68) throw new Error(`[SEED VALIDATION] Expected at least 68 JSAs but got ${jsaCount}`);
+
     console.log("Master Library Seeding Complete!");
   } catch (error) {
     console.error("Seeding Error:", error);

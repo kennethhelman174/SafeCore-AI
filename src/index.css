@@ -139,14 +139,33 @@
   z-index: -1;
 }
 
-@media print {
-  .export-only {
-    position: static;
-    left: auto;
-    width: auto;
-    z-index: auto;
-  }
+.print-source {
+  position: absolute;
+  left: -10000px;
+  top: 0;
+  width: 794px;
+  background: white;
+  color: black;
+  z-index: -1;
+}
 
+@media print {
+  body {
+    visibility: hidden;
+  }
+  .print-source, .print-source * {
+    visibility: visible;
+  }
+  .print-source {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    z-index: 10000;
+  }
+  .export-only {
+    display: none !important;
+  }
   .print\:hidden {
     display: none !important;
   }

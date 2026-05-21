@@ -40,7 +40,7 @@ const safetyItems = [
 export function Layout({ onLogout }: { onLogout: () => void }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, authDisabled } = useAuth();
 
   const isAdmin = user?.role === "Administrator";
   const [searchQuery, setSearchQuery] = useState("");
@@ -183,7 +183,7 @@ export function Layout({ onLogout }: { onLogout: () => void }) {
 
       {/* Main Content Area */}
       <main className="flex flex-1 flex-col overflow-hidden">
-        {import.meta.env.VITE_AUTH_BYPASS === "true" && (
+        {authDisabled && (
           <div className="bg-amber-500 text-slate-950 px-4 py-1.5 text-center text-[10px] font-black tracking-widest uppercase shadow-sm flex items-center justify-center gap-2 z-20">
             <span className="animate-pulse">⚠️</span> Development Auth Bypass Enabled <span className="animate-pulse">⚠️</span>
           </div>

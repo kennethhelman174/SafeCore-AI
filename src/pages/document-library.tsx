@@ -45,7 +45,7 @@ export function DocumentLibrary() {
     typeId: "all",
     categoryId: "all",
     departmentId: "all",
-    statusId: "active",
+    statusId: "all",
     riskLevel: "all"
   });
 
@@ -181,17 +181,45 @@ export function DocumentLibrary() {
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl font-bold text-slate-800">Document Library</h2>
-          <p className="text-xs text-slate-500">Manage all warehouse safety procedures and JSAs.</p>
+          <p className="text-xs text-slate-500">Manage all {pagination.total} warehouse safety procedures and JSAs.</p>
         </div>
-        <button 
-          onClick={() => navigate("/documents/new")}
-          className="rounded bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-700"
-        >
-          + NEW DOCUMENT
-        </button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              fetchDocuments();
+              toast.success("Library reloaded");
+            }}
+            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            REFRESH LIBRARY
+          </button>
+          <button 
+            onClick={() => {
+              setSearch("");
+              setFilters({
+                typeId: "all",
+                categoryId: "all",
+                departmentId: "all",
+                statusId: "all",
+                riskLevel: "all"
+              });
+              setPagination(prev => ({ ...prev, page: 1 }));
+              toast.success("All filters cleared");
+            }}
+            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            CLEAR FILTERS
+          </button>
+          <button 
+            onClick={() => navigate("/documents/new")}
+            className="rounded bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-blue-700"
+          >
+            + NEW DOCUMENT
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">

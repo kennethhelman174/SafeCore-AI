@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { 
   FileText, Shield, GraduationCap, CheckSquare, 
   Download, Filter, Search, ChevronRight, 
@@ -12,6 +13,7 @@ import { toast } from "sonner";
 
 export default function ComplianceReports() {
   const { token } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("training");
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,10 +54,52 @@ export default function ComplianceReports() {
     return text.includes(filter.toLowerCase());
   });
 
+  const getExportData = () => {
+    return filteredData.map(item => {
+      if (activeTab === "training") {
+        return {
+          "Record ID": item.id || "N/A",
+          "Employee Name": item.assignment?.user?.name || "N/A",
+          "Email": item.assignment?.user?.email || "N/A",
+          "Role": item.assignment?.user?.role?.name || "N/A",
+          "Department": item.assignment?.user?.department?.name || "N/A",
+          "Document ID": item.assignment?.document?.docNumber || "N/A",
+          "Document Title": item.assignment?.document?.title || "N/A",
+          "Status": "Completed",
+          "Date Completed": item.createdAt ? format(new Date(item.createdAt), "yyyy-MM-dd HH:mm") : "N/A"
+        };
+      } else if (activeTab === "actions") {
+        return {
+          "Action ID": item.id || "N/A",
+          "Title": item.title || "N/A",
+          "Description": item.description || "N/A",
+          "Priority": item.priority || "medium",
+          "Status": item.status || "open",
+          "Target Due Date": item.dueDate ? format(new Date(item.dueDate), "yyyy-MM-dd") : "N/A",
+          "Created Date": item.createdAt ? format(new Date(item.createdAt), "yyyy-MM-dd") : "N/A"
+        };
+      } else if (activeTab === "documents") {
+        return {
+          "Document ID": item.docNumber || "N/A",
+          "Title": item.title || "N/A",
+          "Type": item.type?.name || "N/A",
+          "Category": item.category?.name || "N/A",
+          "Department": item.department?.name || "N/A",
+          "Current Status": item.status?.name || "N/A",
+          "Risk Level": item.riskLevel || "low",
+          "Version": item.version || 1,
+          "Last Updated": item.updatedAt ? format(new Date(item.updatedAt), "yyyy-MM-dd") : "N/A"
+        };
+      }
+      return item;
+    });
+  };
+
   const handleExport = (exportFormat: "csv" | "excel") => {
      const fileName = `${activeTab}_report_${format(new Date(), "yyyy-MM-dd")}`;
-     if (exportFormat === "csv") exportToCSV(filteredData, fileName);
-     else exportToExcel(filteredData, fileName);
+     const cleanData = getExportData();
+     if (exportFormat === "csv") exportToCSV(cleanData, fileName);
+     else exportToExcel(cleanData, fileName);
   };
 
   return (
@@ -149,49 +193,75 @@ export default function ComplianceReports() {
                       <p className="text-xs font-bold text-slate-400 uppercase">No matching compliance records found</p>
                     </td>
                   </tr>
-                ) : filteredData.map((item: any, idx: number) => (
-                  <tr key={idx} className="group hover:bg-slate-50/50 transition-colors">
-                     <td className="px-6 py-4">
-                        {activeTab === "training" && (
-                          <div className="flex items-center gap-3">
-                             <div className="h-8 w-8 bg-indigo-50 text-indigo-600 rounded flex items-center justify-center font-black text-xs">
-                                {item.assignment?.user?.name?.charAt(0)}
-                             </div>
-                             <div>
-                                <p className="text-sm font-bold text-slate-800">{item.assignment?.user?.name}</p>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase">{item.assignment?.document?.title}</p>
-                             </div>
+                ) : filteredData.map((item: any, idx: number) => {
+                  const handleRowClick = () => {
+                    if (activeTab === "documents") {
+                      navigate(`/documents/${item.id}`);
+                    } else if (activeTab === "actions") {
+                      navigate("/corrective-actions");
+                      toast.info(`Reviewing Action: ${item.title}`);
+                    } else if (activeTab === "training") {
+                      if (item.assignment?.documentId) {
+                        navigate(`/documents/${item.assignment.documentId}`);
+                      } else {
+                        navigate("/training-records");
+                      }
+                    }
+                  };
+                  return (
+                    <tr 
+                      key={idx} 
+                      onClick={handleRowClick}
+                      className="group hover:bg-slate-50/50 transition-colors cursor-pointer"
+                    >
+                       <td className="px-6 py-4">
+                          {activeTab === "training" && (
+                            <div className="flex items-center gap-3">
+                               <div className="h-8 w-8 bg-indigo-50 text-indigo-600 rounded flex items-center justify-center font-black text-xs">
+                                  {item.assignment?.user?.name?.charAt(0)}
+                               </div>
+                               <div>
+                                  <p className="text-sm font-bold text-slate-800">{item.assignment?.user?.name}</p>
+                                  <p className="text-[10px] text-slate-400 font-bold uppercase">{item.assignment?.document?.title}</p>
+                               </div>
+                            </div>
+                          )}
+                          {activeTab === "actions" && (
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">{item.title}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">{item.owner?.name}</p>
+                            </div>
+                          )}
+                          {activeTab === "documents" && (
+                            <div>
+                              <p className="text-sm font-bold text-slate-800">{item.docNumber} - {item.title}</p>
+                              <p className="text-[10px] text-slate-400 font-bold uppercase">{item.type?.name}</p>
+                            </div>
+                          )}
+                       </td>
+                       <td className="px-6 py-4">
+                          <StatusBadge status={item.status} tab={activeTab} />
+                       </td>
+                       <td className="px-6 py-4">
+                          <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase">
+                             <Calendar className="h-3 w-3" />
+                             {format(new Date(item.createdAt || item.updatedAt || new Date()), "MMM dd, yyyy")}
                           </div>
-                        )}
-                        {activeTab === "actions" && (
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{item.title}</p>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">{item.owner?.name}</p>
-                          </div>
-                        )}
-                        {activeTab === "documents" && (
-                          <div>
-                            <p className="text-sm font-bold text-slate-800">{item.docNumber} - {item.title}</p>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">{item.type?.name}</p>
-                          </div>
-                        )}
-                     </td>
-                     <td className="px-6 py-4">
-                        <StatusBadge status={item.status} tab={activeTab} />
-                     </td>
-                     <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase">
-                           <Calendar className="h-3 w-3" />
-                           {format(new Date(item.createdAt || item.updatedAt || new Date()), "MMM dd, yyyy")}
-                        </div>
-                     </td>
-                     <td className="px-6 py-4 text-right">
-                        <button className="p-2 text-slate-300 hover:text-indigo-600 transition">
-                           <ChevronRight className="h-4 w-4" />
-                        </button>
-                     </td>
-                  </tr>
-                ))}
+                       </td>
+                       <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRowClick();
+                            }}
+                            className="p-2 text-slate-300 hover:text-indigo-600 transition"
+                          >
+                             <ChevronRight className="h-4 w-4" />
+                          </button>
+                       </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

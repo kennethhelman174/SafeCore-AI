@@ -6,11 +6,8 @@ if (process.env.NODE_ENV !== "production") {
 }
 
 // DEVELOPMENT BYPASS PROTECTION AT STARTUP
-// If AUTH_BYPASS=true and NODE_ENV=production, the server must throw a clear startup error and refuse to start
-if (process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV === "production") {
-  const critError = "CRITICAL SECURITY ERROR: AUTH_BYPASS cannot be enabled in a production environment. Server startup aborted for compliance.";
-  console.error("\x1b[41m\x1b[37m%s\x1b[0m", critError);
-  throw new Error(critError);
+if (process.env.AUTH_DISABLED === "true") {
+  console.log("\x1b[43m\x1b[30m%s\x1b[0m", "⚠️ WARNING: Authentication is DISABLED (AUTH_DISABLED=true). Do not use this in public production!");
 }
 
 import { createServer as createViteServer } from "vite";
@@ -69,7 +66,7 @@ const authLimiter = rateLimit({
 // Middleware - Authentication
 // [TEMPORARY DEV BYPASS LOGIC] Added a controlled authentication bypass for non-production environments
 const authenticateToken = async (req: any, res: any, next: any) => {
-  const isBypassActive = process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV !== "production";
+  const isBypassActive = process.env.AUTH_DISABLED === "true";
 
   if (isBypassActive) {
     try {
@@ -175,7 +172,11 @@ async function startServer() {
     await prisma.$queryRaw`SELECT 1`;
     console.log(`[STARTUP] Prisma client ran SELECT 1 successfully.`);
   } catch (error) {
-    console.error(`[STARTUP] DATABASE CONNECTION ERROR on startup (retrying lazily):`, error);
+    console.error(`[STARTUP] DATABASE CONNECTION ERROR on startup:`, error);
+    if (process.env.NODE_ENV === "production") {
+      console.error("❌ [STARTUP FATAL] Fatal database connection error on startup in production. Exiting...");
+      process.exit(1);
+    }
     console.warn("⚠️ Continuing startup without terminating, so that development server port 3000 is still bound and reachable.");
   }
 
@@ -237,7 +238,7 @@ async function startServer() {
 
   // API Routes - Public health check
   app.get("/api/health", async (req, res) => {
-    const authBypassEnabled = process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV !== "production";
+    const authBypassEnabled = process.env.AUTH_DISABLED === "true";
     try {
       await prisma.$queryRaw`SELECT 1`;
       const dbUrl = process.env.DATABASE_URL || "";
@@ -270,6 +271,14 @@ async function startServer() {
         error: process.env.NODE_ENV === "development" ? error.message : undefined 
       });
     }
+  });
+
+  // Configuration API for frontend runtime
+  app.get("/api/config", (req, res) => {
+    res.json({
+      authDisabled: process.env.AUTH_DISABLED === "true",
+      appOrigin: process.env.APP_ORIGIN || "http://localhost:3000"
+    });
   });
 
   // AUTHENTICATION APIs
@@ -352,7 +361,7 @@ async function startServer() {
   app.get("/api/auth/me", authenticateToken, async (req: any, res) => {
     try {
       // [TEMPORARY DEV BYPASS LOGIC] Ensure me endpoint works correctly during bypass
-      const isBypassActive = process.env.AUTH_BYPASS === "true" && process.env.NODE_ENV !== "production";
+      const isBypassActive = process.env.AUTH_DISABLED === "true";
       
       if (isBypassActive) {
         const user = await prisma.user.findUnique({
@@ -475,6 +484,7 @@ async function startServer() {
       const trimmedSearch = (search as string).trim();
 
       const where: any = {
+        isLatestRevision: true,
         AND: []
       };
 
@@ -506,8 +516,10 @@ async function startServer() {
       }
       if (riskLevel && riskLevel !== "all") where.AND.push({ riskLevel: riskLevel as string });
 
-      // If no filters added, clear the AND array to avoid empty AND: [] which is valid but cleaner if simple
-      const finalWhere = where.AND.length > 0 ? where : {};
+      if (where.AND.length === 0) {
+        delete where.AND;
+      }
+      const finalWhere = where;
 
       const [documents, total] = await Promise.all([
         prisma.document.findMany({
@@ -1078,6 +1090,14 @@ async function startServer() {
       const masterDataExists = documentTypes.length > 0 && categoryCount > 0 && departmentCount > 0 && roleCount > 0;
 
       res.json({
+        totalDocuments: documentCount,
+        sops: countByDocumentType["SOP"] || 0,
+        workInstructions: countByDocumentType["Work Instruction"] || 0,
+        jsas: countByDocumentType["JSA"] || 0,
+        checklists: countByDocumentType["Inspection Checklist"] || 0,
+        sifAssessments: countByDocumentType["SIF Assessment"] || 0,
+        safetyPolicies: countByDocumentType["Safety Policy"] || 0,
+        emergencyProcedures: countByDocumentType["Emergency Procedure"] || 0,
         userCount,
         roleCount,
         departmentCount,
@@ -1525,7 +1545,8 @@ async function startServer() {
            hazards: true, 
            controls: true, 
            equipment: true,
-           roleRequirements: true
+           roleRequirements: true,
+           riskAssessments: true
          }
       });
       
@@ -1533,7 +1554,7 @@ async function startServer() {
 
       const allowedToRevise = ["Published", "Approved"];
       if (!allowedToRevise.includes(oldDoc.status.name)) {
-        return res.status(400).json({ error: `Cannot create a new revision from a document in '${oldDoc.status.name}' status.` });
+        return res.status(400).json({ error: "Only Approved or Published documents can be revised." });
       }
 
       // Calculate new version
@@ -1548,12 +1569,12 @@ async function startServer() {
         }
       });
       if (existingRevision) {
-        return res.status(409).json({ error: `A draft revision already exists for this document.` });
+        return res.status(409).json({ error: "A draft revision already exists for this document." });
       }
 
       const draftStatus = await prisma.documentStatus.findFirst({ where: { name: "Draft" }});
       if (!draftStatus) {
-        return res.status(500).json({ error: "Draft status is missing. Check seed data." });
+        return res.status(500).json({ error: "Draft status is missing." });
       }
       
       const newDoc = await prisma.$transaction(async (tx) => {
@@ -1597,6 +1618,20 @@ async function startServer() {
             checklistItems: { create: oldDoc.checklistItems.map(s => ({ order: s.order, requirement: s.requirement, frequency: s.frequency }))},
             criticalControls: { create: oldDoc.criticalControls.map(s => ({ name: s.name, verificationMethod: s.verificationMethod, frequency: s.frequency, status: "active" }))},
             
+            riskAssessments: {
+              create: oldDoc.riskAssessments.map(ra => ({
+                preSeverity: ra.preSeverity,
+                preLikelihood: ra.preLikelihood,
+                preExposure: ra.preExposure,
+                preScore: ra.preScore,
+                postSeverity: ra.postSeverity,
+                postLikelihood: ra.postLikelihood,
+                postExposure: ra.postExposure,
+                postScore: ra.postScore,
+                riskReduction: ra.riskReduction
+              }))
+            },
+
             sifDetails: oldDoc.sifDetails ? {
               create: {
                 energySource: oldDoc.sifDetails.energySource,
@@ -1623,7 +1658,15 @@ async function startServer() {
       });
       
       await logAudit("DOCUMENT_REVISION", "Document", newDoc.id, req.user.id, { from: oldDoc.id, version: newVersion });
-      res.json(newDoc);
+      res.json({
+        success: true,
+        document: {
+          id: newDoc.id,
+          docNumber: newDoc.docNumber,
+          currentRevision: newDoc.currentRevision,
+          status: "Draft"
+        }
+      });
     } catch(err) {
        console.error(err);
        res.status(500).json({ error: "Failed to create revision: " + (err as Error).message });

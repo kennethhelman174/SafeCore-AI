@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import { 
   Cloud, Share2, Database, LayoutTemplate, Workflow, PieChart, 
   Download, FileSpreadsheet, Search, Filter, ArrowRight,
-  ExternalLink, CheckCircle2, ChevronRight, Info
+  ExternalLink, CheckCircle2, ChevronRight, Info, X
 } from "lucide-react";
 import { MS365_MAPPINGS, POWER_APPS_SCREENS, POWER_AUTOMATE_WORKFLOWS, TableMapping } from "../constants/ms365Mappings";
 import { exportToCSV } from "../lib/exportUtils";
@@ -12,6 +12,21 @@ import { toast } from "sonner";
 export default function MS365Readiness() {
   const [activeTab, setActiveTab] = useState<"sharepoint" | "dataverse" | "powerapps" | "workflows" | "powerbi">("sharepoint");
   const [searchTerm, setSearchTerm] = useState("");
+  const [selectedScreenLogic, setSelectedScreenLogic] = useState<any | null>(null);
+
+  const handleShowLogic = (screen: any) => {
+    let logic = "";
+    if (screen.name.includes("Hub")) {
+      logic = `Set(VarUser, User().Email);\n\nClearCollect(\n  ColRecentDocuments,\n  Filter(SafetyDocuments, cr_status = "Published")\n);\n\nSet(\n  TotalDrafts,\n  CountRows(Filter(SafetyDocuments, cr_status = "Draft"))\n);`;
+    } else if (screen.name.includes("Builder")) {
+      logic = `SubmitForm(Form_DocumentBuilder);\n\nIf(\n  Form_DocumentBuilder.Success,\n  Notify("Document saved to SharePoint Library", NotificationType.Success);\n  Navigate(Screen_SafetyHubHome),\n  Notify("EHS Validation failed. Check required fields.", NotificationType.Error)\n);`;
+    } else if (screen.name.includes("Field")) {
+      logic = `Collect(ColFloorInspections, {\n  Title: txt_Title.Input,\n  Inspector: User().FullName,\n  Timestamp: Now(),\n  Attachment: Camera_Floor.Photo\n});\n\nSaveData(ColFloorInspections, "InspectionsLocalCache");\nNotify("Offline inspection logged", NotificationType.Success);`;
+    } else {
+      logic = `Patch(SafetyDocuments, SelectedDoc, {\n  cr_status: "Published",\n  cr_approved_by: User().Email,\n  cr_decision_date: Today()\n});\n\nOffice365Outlook.SendEmailV2(\n  SelectedDoc.Author,\n  "Approved: " & SelectedDoc.cr_title,\n  "Approved successfully."\n);`;
+    }
+    setSelectedScreenLogic({ ...screen, formula: logic });
+  };
 
   const handleExportMappings = (mapping: TableMapping) => {
     const data = mapping.fields.map(f => ({
@@ -220,8 +235,18 @@ export default function MS365Readiness() {
                       </div>
                     </div>
                     <div className="mt-6 flex gap-2">
-                       <button className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition">View Screen Logic</button>
-                       <button className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50 transition"><ExternalLink className="h-4 w-4" /></button>
+                       <button 
+                         onClick={() => handleShowLogic(screen)}
+                         className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-indigo-700 transition cursor-pointer"
+                       >
+                         View Screen Logic
+                       </button>
+                       <button 
+                         onClick={() => handleShowLogic(screen)}
+                         className="p-2 border border-slate-200 rounded-lg text-slate-400 hover:bg-slate-50 transition cursor-pointer"
+                       >
+                         <ExternalLink className="h-4 w-4" />
+                       </button>
                     </div>
                   </div>
                 ))}
@@ -322,6 +347,66 @@ export default function MS365Readiness() {
            </div>
         )}
       </div>
+
+      {/* Power Apps Screen Logic Overlay Modal */}
+      {selectedScreenLogic && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-xl rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-150 text-left text-slate-900">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+              <div>
+                <h2 className="text-sm font-black uppercase tracking-widest text-slate-800">
+                  Power Apps Screen Logic Blueprint
+                </h2>
+                <p className="text-[10px] font-bold text-indigo-600 uppercase tracking-wide mt-1">
+                  Screen: {selectedScreenLogic.name}
+                </p>
+              </div>
+              <button 
+                onClick={() => setSelectedScreenLogic(null)}
+                className="rounded-lg p-1 text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <div className="space-y-4 mt-4">
+              <div className="rounded-xl bg-slate-50 p-4 border border-slate-200/60">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider mb-2">Screen Description</p>
+                <p className="text-xs font-semibold text-slate-700 leading-relaxed">
+                  {selectedScreenLogic.description}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Screen Controls Blueprint</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {selectedScreenLogic.components?.map((comp: string, idx: number) => (
+                    <span key={idx} className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-slate-600 text-[10px] font-bold uppercase">
+                      {comp}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-wider">Corresponding Power Fx Logic formula</p>
+                <pre className="w-full rounded-xl bg-slate-900 p-4 text-xs font-mono text-emerald-400 overflow-x-auto whitespace-pre leading-relaxed border border-slate-950">
+                  {selectedScreenLogic.formula}
+                </pre>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
+                <button 
+                  onClick={() => setSelectedScreenLogic(null)}
+                  className="rounded-lg bg-slate-900 border border-slate-900 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white hover:bg-black cursor-pointer"
+                >
+                  Close Specification
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
