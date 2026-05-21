@@ -18,10 +18,20 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { PrismaClient } from "@prisma/client";
+import { GoogleGenAI, Type } from "@google/genai";
 
 import cookieParser from "cookie-parser";
 
 const prisma = new PrismaClient();
+
+const ai_gemini = new GoogleGenAI({
+  apiKey: process.env.GEMINI_API_KEY || "",
+  httpOptions: {
+    headers: {
+      "User-Agent": "aistudio-build"
+    }
+  }
+});
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -484,9 +494,21 @@ async function startServer() {
       const trimmedSearch = (search as string).trim();
 
       const where: any = {
-        isLatestRevision: true,
         AND: []
       };
+
+      if (statusId === "active") {
+        where.isLatestRevision = true;
+        where.AND.push({
+          status: {
+            name: { in: ["Published", "Approved"] }
+          }
+        });
+      } else if (statusId && statusId !== "all") {
+        where.AND.push({ statusId: statusId as string });
+      } else {
+        where.isLatestRevision = true;
+      }
 
       if (trimmedSearch) {
         where.AND.push({
@@ -503,17 +525,6 @@ async function startServer() {
       if (typeId && typeId !== "all") where.AND.push({ typeId: typeId as string });
       if (categoryId && categoryId !== "all") where.AND.push({ categoryId: categoryId as string });
       if (departmentId && departmentId !== "all") where.AND.push({ departmentId: departmentId as string });
-      if (statusId && statusId !== "all") {
-        if (statusId === "active") {
-          where.AND.push({
-            status: {
-              name: { in: ["Published", "Approved"] }
-            }
-          });
-        } else {
-          where.AND.push({ statusId: statusId as string });
-        }
-      }
       if (riskLevel && riskLevel !== "all") where.AND.push({ riskLevel: riskLevel as string });
 
       if (where.AND.length === 0) {
@@ -592,7 +603,6 @@ async function startServer() {
           riskAssessments: { orderBy: { createdAt: "desc" }, take: 1 },
           criticalControls: { include: { verifications: { orderBy: { verifiedAt: "desc" }, take: 5 } } },
           correctiveActions: { include: { assignee: { select: { name: true } } }, orderBy: { createdAt: "desc" } },
-          revisions: { include: { author: { select: { name: true } } }, orderBy: { createdAt: "desc" } },
           workflows: { 
             include: { steps: { include: { reviewer: true } } }, 
             orderBy: { createdAt: "desc" }, take: 1 
@@ -600,8 +610,52 @@ async function startServer() {
         }
       });
       if (!document) return res.status(404).json({ error: "Document not found" });
-      res.json(document);
+
+      // Fetch all historical versions of this document docNumber
+      const allVersions = await prisma.document.findMany({
+        where: { docNumber: document.docNumber },
+        select: {
+          id: true,
+          currentRevision: true,
+          createdAt: true,
+          isLatestRevision: true,
+          status: { select: { name: true } }
+        },
+        orderBy: { createdAt: "desc" }
+      });
+
+      // Find if there is an active published version in this chain
+      const publishedVersion = allVersions.find(v => v.status.name === "Published");
+      const latestVersion = allVersions.find(v => v.isLatestRevision) || allVersions[0];
+      const draftVersion = allVersions.find(v => ["Draft", "In Review", "Submitted for Review", "Approved", "Revision Requested"].includes(v.status.name));
+
+      // Fetch unified revisions across all documents of the same docNumber
+      const allRevisions = await prisma.documentRevision.findMany({
+        where: {
+          document: {
+            docNumber: document.docNumber
+          }
+        },
+        include: {
+          author: { select: { name: true } }
+        },
+        orderBy: {
+          createdAt: "desc"
+        }
+      });
+
+      const docObj = {
+        ...document,
+        revisions: allRevisions,
+        allVersions,
+        publishedVersion: publishedVersion ? { id: publishedVersion.id, currentRevision: publishedVersion.currentRevision } : null,
+        latestVersion: latestVersion ? { id: latestVersion.id, currentRevision: latestVersion.currentRevision } : null,
+        draftVersion: draftVersion ? { id: draftVersion.id, currentRevision: draftVersion.currentRevision, status: draftVersion.status.name } : null
+      };
+
+      res.json(docObj);
     } catch (error) {
+      console.error(error);
       res.status(500).json({ error: "Failed to fetch document" });
     }
   });
@@ -1031,6 +1085,238 @@ async function startServer() {
         res.status(500).json({ error: `Failed to delete ${path} item. It may be in use elsewhere.` });
       }
     });
+  });
+
+  // --- ONE POINT LESSONS ENDPOINTS ---
+  // GET List of lessons (optional filter by sourceType & sourceId)
+  app.get("/api/one-point-lessons", authenticateToken, async (req, res) => {
+    try {
+      const { sourceType, sourceId } = req.query;
+      const where: any = {};
+      if (sourceType) {
+        where.sourceType = String(sourceType);
+      }
+      if (sourceId) {
+        where.sourceId = String(sourceId);
+      }
+      const lessons = await prisma.onePointLesson.findMany({
+        where,
+        orderBy: { createdAt: "desc" }
+      });
+      res.json(lessons);
+    } catch (err) {
+      console.error(err);
+      res.status(500).json({ error: "Failed to fetch One Point Lessons" });
+    }
+  });
+
+  // GET specific lesson by ID
+  app.get("/api/one-point-lessons/:id", authenticateToken, async (req, res) => {
+    try {
+      const lesson = await prisma.onePointLesson.findUnique({
+        where: { id: req.params.id }
+      });
+      if (!lesson) return res.status(404).json({ error: "One Point Lesson not found" });
+      res.json(lesson);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch lesson" });
+    }
+  });
+
+  // POST Create/Save One Point Lesson
+  app.post("/api/one-point-lessons", authenticateToken, async (req, res) => {
+    try {
+      const { 
+        title, 
+        lessonType, 
+        sourceType, 
+        sourceId, 
+        sourceName, 
+        objective, 
+        standardMethod, 
+        goodPractice, 
+        badPractice, 
+        sixSigmaTools, 
+        keySafetyRules, 
+        validationQuiz,
+        isAIGenerated
+      } = req.body;
+
+      if (!title || !lessonType || !sourceType || !sourceId || !sourceName) {
+        return res.status(400).json({ error: "Missing required fields (title, lessonType, sourceType, sourceId, sourceName)" });
+      }
+
+      const lesson = await prisma.onePointLesson.create({
+        data: {
+          title,
+          lessonType,
+          sourceType,
+          sourceId,
+          sourceName,
+          objective: objective || "",
+          standardMethod: standardMethod || "",
+          goodPractice: goodPractice || "",
+          badPractice: badPractice || "",
+          sixSigmaTools: sixSigmaTools || "",
+          keySafetyRules: keySafetyRules || "",
+          validationQuiz: typeof validationQuiz === 'string' ? validationQuiz : JSON.stringify(validationQuiz),
+          isAIGenerated: !!isAIGenerated,
+          createdBy: (req as any).user?.name || "System"
+        }
+      });
+
+      await logAudit("OPL_CREATE", "OnePointLesson", lesson.id, (req as any).user.id);
+      res.json(lesson);
+    } catch (err) {
+      console.error("Error saving lesson:", err);
+      res.status(500).json({ error: "Failed to save One Point Lesson to database" });
+    }
+  });
+
+  // DELETE a One Point Lesson
+  app.delete("/api/one-point-lessons/:id", authenticateToken, authorize(["Administrator", "EHS Engineer"]), async (req, res) => {
+    try {
+      const { id } = req.params;
+      const existing = await prisma.onePointLesson.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ error: "Lesson not found" });
+      
+      await prisma.onePointLesson.delete({ where: { id } });
+      await logAudit("OPL_DELETE", "OnePointLesson", id, (req as any).user.id);
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to delete lesson" });
+    }
+  });
+
+  // POST generate One Point Lesson via Gemini API
+  app.post("/api/one-point-lessons/generate", authenticateToken, async (req, res) => {
+    try {
+      const { sourceType, sourceId, customInstruction } = req.body;
+      if (!sourceType || !sourceId) {
+        return res.status(400).json({ error: "Missing sourceType or sourceId in request." });
+      }
+
+      const key = process.env.GEMINI_API_KEY;
+      if (!key) {
+        return res.status(400).json({ 
+          error: "Gemini API key is not configured in Settings > Secrets. Please enter GEMINI_API_KEY in the platform secrets."
+        });
+      }
+
+      // Fetch master item
+      let name = "";
+      let description = "";
+      let attributes = "";
+
+      if (sourceType === "ppe") {
+        const item = await prisma.pPE.findUnique({ where: { id: sourceId } });
+        if (item) {
+          name = item.name;
+          description = item.description || "";
+          attributes = `When Required: ${item.whenRequired || ""}; Limitations: ${item.limitations || ""}; Inspection Notes: ${item.inspectionNotes || ""}`;
+        }
+      } else if (sourceType === "hazards") {
+        const item = await prisma.hazard.findUnique({ where: { id: sourceId } });
+        if (item) {
+          name = item.name;
+          description = item.description || "";
+          attributes = `Category: ${item.category || ""}; Potential Outcome: ${item.potentialOutcome || ""}; SIF Potential: ${item.sifPotential ? "Yes" : "No"}`;
+        }
+      } else if (sourceType === "controls") {
+        const item = await prisma.control.findUnique({ where: { id: sourceId } });
+        if (item) {
+          name = item.name;
+          description = item.description || "";
+          attributes = `Type: ${item.type || ""}; Effectiveness Level: ${item.effectivenessLevel || ""}; Verification Method: ${item.verificationMethod || ""}`;
+        }
+      } else if (sourceType === "equipment") {
+        const item = await prisma.equipment.findUnique({ where: { id: sourceId } });
+        if (item) {
+          name = item.name;
+          description = item.description || "";
+          attributes = `Category: ${item.category || ""}; Inspection Frequency: ${item.inspectionFreq || ""}`;
+        }
+      }
+
+      if (!name) {
+        return res.status(404).json({ error: `Master item not found in library category ${sourceType}.` });
+      }
+
+      // Generate prompt
+      const prompt = `
+        You are an expert EHS Lead and Lean Six Sigma Master Black Belt.
+        Create an elegant, highly detailed, and standard-compliant "One Point Lesson" (OPL) for training warehouse workers on the following master item:
+        
+        Item Details:
+        - Source Type: ${sourceType.toUpperCase()}
+        - Item Name: ${name}
+        - Description: ${description}
+        - Key Attributes: ${attributes}
+        
+        ${customInstruction ? `User specified instruction: ${customInstruction}` : ""}
+        
+        Create specific visual do's (Good practice) & don'ts (Bad practice). Make sure the content uses continuous improvement concepts (like 5S, DMAIC, poka-yoke / error proofing, Standard Work, or Kanban) for continuous visual and operational reference. Ensure clear and detailed visual cues are described.
+        
+        The validation quiz should contain exactly 3 multiple-choice comprehension questions to verify standard understanding. Return JSON following the response schema.
+      `;
+
+      const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+          title: { type: Type.STRING, description: "Actionable, professional Lean safety title for this 1 Point Lesson." },
+          objective: { type: Type.STRING, description: "Concise training objective." },
+          standardMethod: { type: Type.STRING, description: "Detailed summary of the standard 3-5 steps of operation or inspect procedure." },
+          goodPractice: { type: Type.STRING, description: "Descriptive visual 'DO' bullet points." },
+          badPractice: { type: Type.STRING, description: "Descriptive visual 'DON'T' bullet points." },
+          sixSigmaTools: { type: Type.STRING, description: "Detailed Lean Six Sigma tools application reference (e.g. 5S, Poka-Yoke, Control phase, Standard Work)." },
+          keySafetyRules: { type: Type.STRING, description: "Key safety guidelines to remember, with bullet points." },
+          validationQuiz: {
+            type: Type.ARRAY,
+            description: "Comprehension check questions",
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                question: { type: Type.STRING },
+                options: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING }
+                },
+                correctIndex: { type: Type.INTEGER }
+              },
+              required: ["question", "options", "correctIndex"]
+            }
+          }
+        },
+        required: ["title", "objective", "standardMethod", "goodPractice", "badPractice", "sixSigmaTools", "keySafetyRules", "validationQuiz"]
+      };
+
+      const aiResponse = await ai_gemini.models.generateContent({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json",
+          responseSchema,
+          temperature: 0.3
+        }
+      });
+
+      const responseText = aiResponse.text;
+      if (!responseText) {
+        throw new Error("Empty response from Gemini engine.");
+      }
+
+      const result = JSON.parse(responseText.trim());
+      res.json({
+        ...result,
+        sourceType,
+        sourceId,
+        sourceName: name,
+        isAIGenerated: true
+      });
+    } catch (err: any) {
+      console.error("Gemini OPL generation failed:", err);
+      res.status(500).json({ error: "AI Generation of One Point Lesson failed", details: err.message });
+    }
   });
 
   // Library Aggregated Status for Admin Dashboard
@@ -1477,13 +1763,28 @@ async function startServer() {
       const status = await prisma.documentStatus.findFirst({ where: { name: "Published" }});
       if (!status) return res.status(500).json({ error: "Missing status" });
       
-      const updated = await prisma.document.update({
-        where: { id },
-        data: { 
-          statusId: status.id,
-          effectiveDate: effectiveDate ? new Date(effectiveDate) : new Date(),
-          updatedAt: new Date()
-        }
+      const updated = await prisma.$transaction(async (tx) => {
+        // Set all other versions of this document to isLatestRevision = false
+        await tx.document.updateMany({
+          where: {
+            docNumber: doc.docNumber,
+            id: { not: id }
+          },
+          data: {
+            isLatestRevision: false
+          }
+        });
+
+        // Publish current version and set isLatestRevision = true
+        return await tx.document.update({
+          where: { id },
+          data: { 
+            statusId: status.id,
+            isLatestRevision: true,
+            effectiveDate: effectiveDate ? new Date(effectiveDate) : new Date(),
+            updatedAt: new Date()
+          }
+        });
       });
 
       // Special action: Assign training if required
@@ -1588,7 +1889,7 @@ async function startServer() {
             departmentId: oldDoc.departmentId,
             statusId: draftStatus.id,
             currentRevision: newVersion,
-            isLatestRevision: true,
+            isLatestRevision: false,
             riskLevel: oldDoc.riskLevel,
             sifPotential: oldDoc.sifPotential,
             requiredTraining: oldDoc.requiredTraining,
@@ -1646,12 +1947,6 @@ async function startServer() {
 
             revisions: { create: [{ revision: newVersion, changeNote: changeSummary || "New major revision", authorId: req.user.id }] }
           }
-        });
-
-        // Mark previous as not latest
-        await tx.document.update({
-          where: { id: oldDoc.id },
-          data: { isLatestRevision: false }
         });
 
         return created;

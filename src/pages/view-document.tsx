@@ -14,6 +14,7 @@ import {
   History,
   Download,
   Printer,
+  Info,
 } from "lucide-react";
 import { toast } from "sonner";
 import { exportToPDF } from "../lib/exportUtils";
@@ -234,6 +235,73 @@ export function ViewDocument() {
           )}
         </div>
       </div>
+
+      {/* Dynamic Alerts for Revisions */}
+      {doc.status?.name === "Published" && doc.latestVersion && doc.latestVersion.id !== doc.id && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3 text-amber-800">
+            <AlertTriangle className="h-5 w-5 shrink-0" />
+            <div>
+              <p className="font-bold text-sm uppercase tracking-wider">
+                ⚠️ Outdated Version (v{doc.currentRevision})
+              </p>
+              <p className="text-xs">
+                This document revision is retired and has been replaced by a newer published version (v{doc.latestVersion.currentRevision}).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate(`/documents/${doc.latestVersion.id}`)}
+            className="rounded bg-amber-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-amber-700"
+          >
+            VIEW LATEST REVISION (v{doc.latestVersion.currentRevision})
+          </button>
+        </div>
+      )}
+
+      {doc.status?.name === "Published" && doc.draftVersion && doc.draftVersion.id !== doc.id && (
+        <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3 text-indigo-900">
+            <History className="h-5 w-5 text-indigo-600 shrink-0" />
+            <div>
+              <p className="font-bold text-sm uppercase tracking-wider text-indigo-950">
+                Draft Revision In Progress (v{doc.draftVersion.currentRevision})
+              </p>
+              <p className="text-xs text-indigo-800">
+                A newer draft revision (v{doc.draftVersion.currentRevision}) of this procedure is currently in review/progress.
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate(`/documents/${doc.draftVersion.id}`)}
+            className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-indigo-700"
+          >
+            VIEW WORK-IN-PROGRESS REVISION
+          </button>
+        </div>
+      )}
+
+      {["Draft", "In Review", "Submitted for Review", "Approved", "Revision Requested"].includes(doc.status?.name || "") && doc.publishedVersion && (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-3 text-slate-800">
+            <Info className="h-5 w-5 text-slate-500 shrink-0" />
+            <div>
+              <p className="font-bold text-sm uppercase tracking-wider text-slate-900">
+                Working Draft / Revision in Progress
+              </p>
+              <p className="text-xs text-slate-600">
+                This is a draft/review version of an existing active procedure (v{doc.publishedVersion.currentRevision}).
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate(`/documents/${doc.publishedVersion.id}`)}
+            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 transition hover:bg-slate-100"
+          >
+            VIEW ACTIVE PUBLISHED VERSION (v{doc.publishedVersion.currentRevision})
+          </button>
+        </div>
+      )}
 
       {doc.status?.name === "Revision Requested" && (
         <div className="rounded-lg border-2 border-orange-100 bg-orange-50 p-4 flex items-center justify-between">
@@ -457,9 +525,28 @@ export function ViewDocument() {
                 </span>
               )}
             </div>
-            <p className="mt-1 font-mono text-sm text-slate-400">
-              {doc.docNumber} • {doc.type?.name} • v{doc.currentRevision}
-            </p>
+            {doc.allVersions && doc.allVersions.length > 1 ? (
+              <div className="mt-1 flex items-center gap-1.5 font-mono text-sm text-slate-400">
+                <span>{doc.docNumber} • {doc.type?.name} •</span>
+                <div className="relative inline-block text-left">
+                  <select
+                    value={doc.id}
+                    onChange={(e) => navigate(`/documents/${e.target.value}`)}
+                    className="bg-slate-50 border border-slate-200 text-slate-700 text-xs rounded-md px-2 py-0.5 font-bold transition hover:bg-slate-100 cursor-pointer focus:outline-none"
+                  >
+                    {doc.allVersions.map((v: any) => (
+                      <option key={v.id} value={v.id}>
+                        v{v.currentRevision} ({v.status?.name || "Draft"})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-1 font-mono text-sm text-slate-400">
+                {doc.docNumber} • {doc.type?.name} • v{doc.currentRevision}
+              </p>
+            )}
           </div>
           <div className="text-right">
             <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">

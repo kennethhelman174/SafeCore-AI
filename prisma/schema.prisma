@@ -618,3 +618,25 @@ model AIReviewResult {
 
   @@index([documentId])
 }
+
+model OnePointLesson {
+  id              String   @id @default(uuid())
+  title           String
+  lessonType      String   // basic_knowledge, troubleshooting, or improvement
+  sourceType      String   // ppe, hazards, controls, or equipment
+  sourceId        String
+  sourceName      String
+  objective       String
+  standardMethod  String
+  goodPractice    String
+  badPractice     String
+  sixSigmaTools   String?  // e.g., 5S, DMAIC, poka-yoke, fishbone
+  keySafetyRules  String?
+  validationQuiz  String?  // JSON-encoded array of questions
+  isAIGenerated   Boolean  @default(false)
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([sourceType, sourceId])
+}

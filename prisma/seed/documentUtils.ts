@@ -54,7 +54,185 @@ export async function getDocumentContext(prisma: PrismaClient) {
   };
 }
 
+function generateDynamicPPE(title: string): string[] {
+  const t = title.toLowerCase();
+  if (t.includes("reach truck")) {
+    return ["Safety shoes", "High-visibility vest", "Safety glasses"];
+  }
+  if (t.includes("forklift") || t.includes("picker") || t.includes("pit") || t.includes("tractor")) {
+    return ["Safety shoes", "High-visibility vest", "Safety glasses"];
+  }
+  if (t.includes("pallet jack")) {
+    return ["Safety shoes", "High-visibility vest", "General work gloves"];
+  }
+  if (t.includes("battery") || t.includes("watering") || t.includes("charge")) {
+    return ["Safety glasses", "Chemical-resistant gloves", "Face shield", "Apron"];
+  }
+  if (t.includes("loto") || t.includes("lockout") || t.includes("energy")) {
+    return ["Safety glasses", "Lockout/tagout kit"];
+  }
+  if (t.includes("chemical") || t.includes("spill") || t.includes("hazmat") || t.includes("acid")) {
+    return ["Safety glasses", "Chemical-resistant gloves", "Apron"];
+  }
+  if (t.includes("ladder") || t.includes("height") || t.includes("scissor lift")) {
+    return ["Safety shoes", "Fall protection harness", "Fall protection lanyard", "Hard hat"];
+  }
+  if (t.includes("conveyor") || t.includes("roller")) {
+    return ["Safety shoes", "Bump cap", "Cut-resistant gloves"];
+  }
+  if (t.includes("emergency") || t.includes("fire") || t.includes("evacuation") || t.includes("first aid")) {
+    return ["Safety shoes", "High-visibility vest"];
+  }
+  if (t.includes("housekeeping") || t.includes("5s") || t.includes("clean") || t.includes("sweep")) {
+    return ["Safety shoes", "General work gloves", "Dust mask"];
+  }
+  return ["Safety shoes", "High-visibility vest"];
+}
+
+function generateDynamicHazards(title: string): string[] {
+  const t = title.toLowerCase();
+  if (t.includes("reach truck")) {
+    return ["Forklift traffic", "Pedestrian interaction", "Blind corners"];
+  }
+  if (t.includes("forklift") || t.includes("picker") || t.includes("pit") || t.includes("tractor")) {
+    return ["Forklift traffic", "Pedestrian interaction", "Blind corners"];
+  }
+  if (t.includes("pallet jack")) {
+    return ["Slips, trips, and falls", "Pedestrian interaction"];
+  }
+  if (t.includes("battery") || t.includes("watering") || t.includes("charge")) {
+    return ["Battery charging hazards", "Chemical exposure", "Battery acid exposure"];
+  }
+  if (t.includes("loto") || t.includes("lockout") || t.includes("energy")) {
+    return ["Hazardous energy", "Electrical exposure", "Stored energy", "Unexpected startup"];
+  }
+  if (t.includes("chemical") || t.includes("spill") || t.includes("hazmat") || t.includes("acid")) {
+    return ["Chemical exposure", "Wet floors", "Slips, trips, and falls"];
+  }
+  if (t.includes("ladder") || t.includes("height") || t.includes("scissor lift")) {
+    return ["Fall from height", "Elevated work", "Falling objects"];
+  }
+  if (t.includes("conveyor") || t.includes("roller")) {
+    return ["Conveyor pinch points", "Conveyor nip points", "Entanglement", "Unexpected startup"];
+  }
+  if (t.includes("dock") || t.includes("door") || t.includes("leveler") || t.includes("restraint") || t.includes("chock") || t.includes("trailer")) {
+    return ["Trailer creep", "Trailer separation", "Dock edge fall", "Fall from dock"];
+  }
+  if (t.includes("emergency") || t.includes("fire") || t.includes("evacuation") || t.includes("first aid")) {
+    return ["Fire hazards", "Blocked exits", "Medical emergency", "Severe weather"];
+  }
+  if (t.includes("housekeeping") || t.includes("5s") || t.includes("clean") || t.includes("sweep")) {
+    return ["Slips, trips, and falls", "Poor housekeeping"];
+  }
+  return ["Slips, trips, and falls"];
+}
+
+function generateDynamicControls(title: string): string[] {
+  const t = title.toLowerCase();
+  if (t.includes("reach truck")) {
+    return ["Training", "SOP", "Blue/red forklift lights", "Backup alarms"];
+  }
+  if (t.includes("forklift") || t.includes("picker") || t.includes("pit") || t.includes("tractor")) {
+    return ["Training", "SOP", "Blue/red forklift lights", "Backup alarms"];
+  }
+  if (t.includes("pallet jack")) {
+    return ["Training", "SOP"];
+  }
+  if (t.includes("battery") || t.includes("watering") || t.includes("charge")) {
+    return ["Training", "SOP", "Secondary battery cover"];
+  }
+  if (t.includes("loto") || t.includes("lockout") || t.includes("energy")) {
+    return ["LOTO applied and verified", "Zero energy verification", "Lockout/tagout verification", "SOP"];
+  }
+  if (t.includes("chemical") || t.includes("spill") || t.includes("hazmat") || t.includes("acid")) {
+    return ["Training", "SOP", "Use lower-risk chemical"];
+  }
+  if (t.includes("ladder") || t.includes("height") || t.includes("scissor lift")) {
+    return ["Fall protection inspected", "Permit to work", "Supervisor verification"];
+  }
+  if (t.includes("conveyor") || t.includes("roller")) {
+    return ["Physical Guarding", "Interlocked guards", "Conveyor emergency stops", "LOTO applied and verified"];
+  }
+  if (t.includes("dock") || t.includes("door") || t.includes("leveler") || t.includes("restraint") || t.includes("chock") || t.includes("trailer")) {
+    return ["Training", "SOP", "Dock restraint engaged", "Wheel chocks applied", "Trailer condition verified"];
+  }
+  if (t.includes("emergency") || t.includes("fire") || t.includes("evacuation") || t.includes("first aid")) {
+    return ["Training", "SOP", "Signage"];
+  }
+  if (t.includes("housekeeping") || t.includes("5s") || t.includes("clean") || t.includes("sweep")) {
+    return ["Training", "SOP", "Signage"];
+  }
+  return ["Training", "SOP"];
+}
+
+function generateDynamicEquipment(title: string): string[] {
+  const t = title.toLowerCase();
+  if (t.includes("reach truck")) {
+    return ["Stand-up reach truck"];
+  }
+  if (t.includes("sit-down forklift")) {
+    return ["Sit-down forklift"];
+  }
+  if (t.includes("order picker")) {
+    return ["Order picker"];
+  }
+  if (t.includes("pallet jack")) {
+    return t.includes("electric") ? ["Electric pallet jack"] : ["Manual pallet jack"];
+  }
+  if (t.includes("forklift") || t.includes("pit")) {
+    return ["Forklift"];
+  }
+  if (t.includes("battery") || t.includes("watering") || t.includes("charge")) {
+    return ["Battery charger"];
+  }
+  if (t.includes("loto") || t.includes("lockout") || t.includes("energy")) {
+    return ["Electrical panel"];
+  }
+  if (t.includes("chemical") || t.includes("spill") || t.includes("hazmat") || t.includes("acid")) {
+    return ["Spill kit", "Eyewash station"];
+  }
+  if (t.includes("scissor lift")) {
+    return ["Scissor lift"];
+  }
+  if (t.includes("ladder")) {
+    return ["Ladder"];
+  }
+  if (t.includes("conveyor") || t.includes("roller")) {
+    return ["Conveyor"];
+  }
+  if (t.includes("dock door")) {
+    return ["Dock door"];
+  }
+  if (t.includes("leveler")) {
+    return ["Dock leveler"];
+  }
+  if (t.includes("restraint") || t.includes("chock") || t.includes("trailer")) {
+    return ["Dock restraint", "Trailer stand"];
+  }
+  if (t.includes("fire")) {
+    return ["Fire extinguisher"];
+  }
+  if (t.includes("first aid")) {
+    return ["First aid kit", "AED"];
+  }
+  return [];
+}
+
 export async function upsertDocument(prisma: PrismaClient, ctx: any, doc: any) {
+  // Populate dynamic meta if empty or undefined
+  if (!doc.ppe || doc.ppe.length === 0) {
+    doc.ppe = generateDynamicPPE(doc.title);
+  }
+  if (!doc.hazards || doc.hazards.length === 0) {
+    doc.hazards = generateDynamicHazards(doc.title);
+  }
+  if (!doc.controls || doc.controls.length === 0) {
+    doc.controls = generateDynamicControls(doc.title);
+  }
+  if (!doc.equipment || doc.equipment.length === 0) {
+    doc.equipment = generateDynamicEquipment(doc.title);
+  }
+
   const key = {
     docNumber_currentRevision: { 
       docNumber: doc.docNumber, 
